@@ -137,12 +137,22 @@ export function MetroMap() {
         {/* Station dots + hover labels using anchors */}
         {(lineNames as LineName[]).map((ln: LineName) => (
           <g key={`stations-${ln}`}>
-            {(anchors[ln] || []).map((an) => (
-              <g key={`st-${ln}-${an.stopId}`} className="station" transform={`translate(${an.xy.x},${an.xy.y})`}>
-                <circle r={5} fill="#fff" stroke={COLORS[ln]} strokeWidth={4} />
-                <text className="label" x={8} y={-8} fontSize={10} fill="#25282B">{stationById[an.stopId]?.name ?? an.stopId}</text>
-              </g>
-            ))}
+            {(anchors[ln] || []).map((an) => {
+              const info = stationById[an.stopId];
+              const dx = info?.cx ?? an.xy.x;
+              const dy = info?.cy ?? an.xy.y;
+              // Label absolute placement (fallback to offset if not provided)
+              const lxAbs = info?.labelX ?? dx + 8;
+              const lyAbs = info?.labelY ?? dy - 8;
+              const lx = lxAbs - dx;
+              const ly = lyAbs - dy;
+              return (
+                <g key={`st-${ln}-${an.stopId}`} className="station" transform={`translate(${dx},${dy})`}>
+                  <circle r={5} fill="#fff" stroke={COLORS[ln]} strokeWidth={4} />
+                  <text className="label" x={lx} y={ly} fontSize={10} fill="#25282B">{info?.name ?? an.stopId}</text>
+                </g>
+              );
+            })}
           </g>
         ))}
 
