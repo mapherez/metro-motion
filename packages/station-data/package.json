@@ -1,0 +1,32 @@
+{
+  "name": "@metro/station-data",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./src/index.ts",
+      "types": "./src/index.ts"
+    },
+    "./stations": {
+      "import": "./src/stations.ts",
+      "types": "./src/stations.ts"
+    },
+    "./geometry": {
+      "import": "./src/geometry.ts",
+      "types": "./src/geometry.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rimraf dist"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  }
+}

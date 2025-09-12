@@ -1,0 +1,15 @@
+{
+  "name": "metro-live",
+  "private": true,
+  "packageManager": "pnpm@8.15.5",
+  "scripts": {
+    "dev": "turbo run dev --parallel",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "clean": "turbo run clean",
+    "extract:stations": "node tools/extract-stations.mjs"
+  },
+  "devDependencies": {
+    "turbo": "^2.0.6"
+  }
+}
