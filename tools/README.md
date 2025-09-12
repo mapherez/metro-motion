@@ -5,7 +5,7 @@ This folder contains utility scripts and assets used during development. Nothing
 Contents
 
 - assets/map.svg: Source SVG used to extract station dot/label positions. Not bundled into the app.
-- extract-stations.mjs: One‑off script that parses the SVG and writes `packages/station-data/src/station-positions.ts`.
+- extract-stations.mjs: One-off script that parses the SVG and embeds coordinates into `packages/station-data/src/stations.ts`.
 
 Optional (mock data)
 
@@ -21,7 +21,7 @@ Usage
 pnpm extract:stations
 ```
 
-This generates (or updates) the TypeScript file with `cx`, `cy`, `labelX`, `labelY` for each `data-stationid` in the SVG. These values are merged into `stationById` at runtime.
+This embeds `cx`, `cy`, `labelX`, `labelY` for each `data-stationid` directly into `stationById` in stations.ts.
 
 Notes
 

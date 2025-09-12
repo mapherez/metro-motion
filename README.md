@@ -41,7 +41,7 @@ metro-motion/
     deploy/             # Fly.io manifest and notes
   tools/
     assets/             # Source map.svg for extraction
-    extract-stations.mjs# Generates station-positions.ts from map.svg
+    extract-stations.mjs# Embeds positions into station-data/stations.ts
   pnpm-workspace.yaml
   turbo.json
 ```
@@ -84,7 +84,7 @@ PORT=8080
 - React + Vite + TypeScript + Zustand
 - Map rendering:
   - Canonical line paths live in `@metro/station-data/geometry`
-  - Station positions (`cx/cy`) and name labels come from `@metro/station-data/stations` (merged with generated `station-positions.ts`)
+  - Station positions (`cx/cy`) and name labels come from `@metro/station-data/stations` (embedded by the extractor)
   - Train markers use path length interpolation (`getPointAtLength`) to follow curves
 - Realtime:
   - On load: `GET /now`
@@ -119,7 +119,7 @@ We store precise station dot and label positions in source for consistency. If y
 pnpm extract:stations
 ```
 
-This runs `tools/extract-stations.mjs`, which reads `tools/assets/map.svg` and writes `packages/station-data/src/station-positions.ts`. The data is merged into `stationById` at runtime.
+This runs `tools/extract-stations.mjs`, which reads `tools/assets/map.svg` and embeds coordinates into `packages/station-data/src/stations.ts` under each station entry.
 
 ## Deploy
 
