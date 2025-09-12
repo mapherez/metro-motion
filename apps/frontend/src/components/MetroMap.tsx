@@ -128,11 +128,26 @@ export function MetroMap() {
         viewBox={`0 0 ${viewBox.width} ${viewBox.height}`}
         style={{ width: '100%', height: 'auto', display: 'block' }}
       >
-        {/* Lines */}
-        <path id={linePaths.azul.id} d={linePaths.azul.d} stroke="#467DED" strokeWidth={8} fill="none" strokeLinecap="round" />
-        <path id={linePaths.vermelha.id} d={linePaths.vermelha.d} fill="#E7343F" />
-        <path id={linePaths.amarela.id} d={linePaths.amarela.d} stroke="#FFB83B" strokeWidth={8} fill="none" strokeLinecap="round" strokeLinejoin="round" />
-        <path id={linePaths.verde.id} d={linePaths.verde.d} stroke="#07AC56" strokeWidth={8} fill="none" strokeLinecap="round" />
+        {/* Lines (driven by geometry.kind) */}
+        {(['azul','vermelha','amarela','verde'] as LineName[]).map((ln) => {
+          const lp = linePaths[ln];
+          const color = COLORS[ln];
+          if (lp.kind === 'stroke') {
+            return (
+              <path
+                key={ln}
+                id={lp.id}
+                d={lp.d}
+                stroke={color}
+                strokeWidth={8}
+                fill="none"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            );
+          }
+          return <path key={ln} id={lp.id} d={lp.d} fill={color} />;
+        })}
 
         {/* Station dots + hover labels using anchors */}
         {(lineNames as LineName[]).map((ln: LineName) => (
