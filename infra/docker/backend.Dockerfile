@@ -2,20 +2,20 @@
 FROM node:20-alpine AS build
 WORKDIR /app
 
-# Enable pnpm
+# Enable pnpm via Corepack
 RUN corepack enable && corepack prepare pnpm@8.15.5 --activate
 
-# Copy workspace manifests
+# Copy workspace manifests first for caching
 COPY pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
 COPY apps/backend/package.json apps/backend/tsconfig.json ./apps/backend/
 COPY packages/shared-types/package.json ./packages/shared-types/
 COPY packages/shared-utils/package.json ./packages/shared-utils/
 COPY packages/station-data/package.json ./packages/station-data/
 
-# Install deps needed for build
-RUN pnpm install --filter @metro/backend...
+# Install all deps needed for build
+RUN pnpm install --filter @metro/backend... --prod=false
 
-# Copy sources
+# Now copy sources
 COPY packages ./packages
 COPY apps/backend ./apps/backend
 
@@ -30,21 +30,20 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=8080
 
-# Enable pnpm
+# Enable pnpm again in runtime
 RUN corepack enable && corepack prepare pnpm@8.15.5 --activate
 
-# Copy only package.json + lock for backend
-COPY apps/backend/package.json ./
+# Copy lockfile + backend package.json
 COPY pnpm-lock.yaml ./
-COPY pnpm-workspace.yaml ./
+COPY apps/backend/package.json ./ 
 
-# Install only prod deps for backend
-RUN pnpm install --prod --filter @metro/backend...
+# Install only production deps (all workspaces if needed)
+RUN pnpm install --prod
 
 # Copy build output
 COPY --from=build /app/apps/backend/dist ./dist
 
-# TLS cert
+# TLS: copy CA bundle
 COPY infra/certs/metro-ca-bundle.pem /etc/ssl/certs/metro-ca-bundle.pem
 ENV NODE_EXTRA_CA_CERTS=/etc/ssl/certs/metro-ca-bundle.pem
 
