@@ -1,4 +1,4 @@
-import { Snapshot, Train } from "@metro/shared-types";
+import type { Snapshot as SnapshotT, Train as TrainT } from "@metro/shared-types";
 import { destinos, neighborForDirection, lineNames } from "@metro/station-data";
 
 type TempoEsperaItem = {
@@ -105,9 +105,9 @@ export function normalizeTempoEspera(
   return trains;
 }
 
-export function toSnapshot(trains: InferredTrain[]): Snapshot {
+export function toSnapshot(trains: InferredTrain[]): SnapshotT {
   const t = Math.floor(Date.now() / 1000);
-  const lines: Record<string, { trains: Train[] }> = {};
+  const lines: Record<string, { trains: TrainT[] }> = {};
   for (const name of lineNames) {
     lines[name] = { trains: [] };
   }
@@ -120,7 +120,7 @@ export function toSnapshot(trains: InferredTrain[]): Snapshot {
       etaNext: tr.etaNext,
       progress01: tr.progress01,
       dest: tr.dest
-    } as Train);
+    } as TrainT);
   }
-  return { t, lines } as Snapshot;
+  return { t, lines } as SnapshotT;
 }

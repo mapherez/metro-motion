@@ -20,4 +20,5 @@ export const Snapshot = z.object({
 });
 
 export type Snapshot = z.infer<typeof Snapshot>;
-
+export type Train = z.infer<typeof Train>;
+export type Line = z.infer<typeof Line>;
