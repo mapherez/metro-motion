@@ -75,7 +75,7 @@ REDIS_CHANNEL=metro:events
 REDIS_SNAPSHOT_KEY=metro:snapshot
 
 # CORS/Security
-CORS_ORIGIN=http://localhost:5173
+CORS_ORIGIN=http://localhost:5174
 PORT=8080
 ```
 
@@ -109,7 +109,7 @@ pnpm -w dev
 pnpm -w build
 ```
 
-Frontend dev server: http://localhost:5173  → proxies `/api/*` to backend http://localhost:8080
+Frontend dev server: http://localhost:5174  → proxies `/api/*` to backend http://localhost:8080
 
 ## Station Geometry Extraction
 

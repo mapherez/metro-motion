@@ -1,5 +1,6 @@
-import type { Snapshot as SnapshotT, Train as TrainT } from "@metro/shared-types";
+﻿import type { Snapshot as SnapshotT, Train as TrainT } from "@metro/shared-types";
 import { destinos, neighborForDirection, lineNames } from "@metro/station-data";
+import { lineOrder } from "@metro/station-data";
 
 type TempoEsperaItem = {
   stop_id: string;
@@ -33,79 +34,83 @@ export type InferredTrain = {
   dest: string; // human name
 };
 
-// Build trains by grouping observations per train and selecting the soonest ETA observation as the upcoming stop
+// Build trains by aggregating per train and inferring direction using nearest two stops
 export function normalizeTempoEspera(
   data: TempoEsperaResponse,
   prev: Map<string, TrainState>,
   dwellSeconds: number
 ): InferredTrain[] {
-  const perTrain: Map<string, { to: string; eta: number; destId?: string }> = new Map();
+  const rows: any = (data as any)?.resposta;
+  if (!Array.isArray(rows)) return [];
 
-  // Guard: API may return { codigo: "500", resposta: "Circulação encerrada" } during closed hours.
-  // In that case, treat it as no trains.
-  const list: any = (data as any)?.resposta;
-  if (!Array.isArray(list)) {
-    return [];
-  }
+  type Obs = { stop: string; eta: number; destId?: string };
+  const perTrain: Map<string, Obs[]> = new Map();
 
-  for (const it of list) {
+  for (const it of rows) {
     const triplets: Array<[string | undefined, string | undefined]> = [
       [it.comboio, it.tempoChegada1],
       [it.comboio2, it.tempoChegada2],
       [it.comboio3, it.tempoChegada3]
     ];
-    for (const [id, etaStr] of triplets) {
-      if (!id || !etaStr) continue;
+    for (const [trainId, etaStr] of triplets) {
+      if (!trainId || !etaStr) continue;
       const eta = parseInt(etaStr, 10);
       if (!Number.isFinite(eta)) continue;
-      const cur = perTrain.get(id);
-      if (!cur || eta < cur.eta) {
-        perTrain.set(id, { to: it.stop_id, eta, destId: it.destino });
-      }
+      const arr = perTrain.get(trainId) || [];
+      arr.push({ stop: it.stop_id, eta, destId: it.destino });
+      perTrain.set(trainId, arr);
     }
   }
 
   const now = Math.floor(Date.now() / 1000);
-  const trains: InferredTrain[] = [];
+  const result: InferredTrain[] = [];
 
-  for (const [id, obs] of perTrain.entries()) {
-    const destMeta = (obs.destId && destinos[obs.destId]) || undefined;
-    // Default to verde if unknown (should be rare if destino present)
-    const line = destMeta?.line ?? "verde";
-    const destName = destMeta?.name ?? "";
-    const terminal = destMeta?.terminal ?? obs.to;
+  for (const [trainId, list] of perTrain.entries()) {
+    list.sort((a, b) => a.eta - b.eta);
+    const min1 = list[0];
+    const min2 = list[1];
+    const to = min1.stop;
+    const etaNext = min1.eta;
 
-    // Determine neighbor from/to using line order if known
-    const { prev: prevStop, next: nextStop } = neighborForDirection(line, obs.to, terminal);
-    const to = obs.to;
-    const from = prevStop ?? to; // fall back to to when unknown
+    const destId = min1.destId || (min2 && min2.destId) || undefined;
+    const destMeta = (destId && destinos[destId]) || undefined;
+    const line = (destMeta?.line as InferredTrain['line']) || 'verde';
+    const destName = destMeta?.name || '';
+    const terminal = destMeta?.terminal || to;
 
-    // Estimate progress
-    const prevState = prev.get(id);
-    let segmentStartEta = prevState && prevState.to === to ? prevState.segmentStartEta : obs.eta;
-    if (!Number.isFinite(segmentStartEta) || segmentStartEta <= 0) {
-      segmentStartEta = obs.eta + dwellSeconds; // crude default
+    const order = lineOrder[line];
+    const idxTo = order.indexOf(to);
+    const idxTerm = order.indexOf(terminal);
+    let dirSign = 0;
+    if (idxTo >= 0 && idxTerm >= 0) dirSign = Math.sign(idxTerm - idxTo);
+    if (dirSign === 0 && min2) {
+      const idx2 = order.indexOf(min2.stop);
+      if (idx2 >= 0 && idxTo >= 0) dirSign = Math.sign(idx2 - idxTo);
     }
-    // progress based on fraction of remaining ETA over starting ETA
-    let progress01 = 1 - obs.eta / segmentStartEta;
-    if (obs.eta === 0) progress01 = 1;
+    if (dirSign === 0) dirSign = 1;
+
+    let fromIdx = idxTo - dirSign;
+    if (fromIdx < 0 || fromIdx >= order.length) {
+      fromIdx = idxTo + dirSign;
+      if (fromIdx < 0 || fromIdx >= order.length) fromIdx = idxTo;
+    }
+    const from = order[fromIdx] || to;
+
+    const prevState = prev.get(trainId);
+    let segmentStartEta = prevState && prevState.to === to ? prevState.segmentStartEta : etaNext + dwellSeconds;
+    if (!Number.isFinite(segmentStartEta) || segmentStartEta <= 0) segmentStartEta = Math.max(etaNext, 1);
+
+    let progress01 = etaNext === 0 ? 1 : 1 - etaNext / segmentStartEta;
     if (!Number.isFinite(progress01)) progress01 = 0;
     if (progress01 < 0) progress01 = 0;
     if (progress01 > 1) progress01 = 1;
 
-    // Guard against NaN sneaking into JSON (would become null)
-    const safeEta = Number.isFinite(obs.eta) ? obs.eta : 0;
-    const safeProg = Number.isFinite(progress01) ? progress01 : 0;
-    trains.push({ id, line, from, to, etaNext: safeEta, progress01: safeProg, dest: destName });
-
-    // update prev state for caller convenience
-    prev.set(id, { to, segmentStartEta, t: now });
+    result.push({ id: trainId, line, from, to, etaNext, progress01, dest: destName });
+    prev.set(trainId, { to, segmentStartEta, t: now });
   }
 
-  return trains;
-}
-
-export function toSnapshot(trains: InferredTrain[]): SnapshotT {
+  return result;
+}export function toSnapshot(trains: InferredTrain[]): SnapshotT {
   const t = Math.floor(Date.now() / 1000);
   const lines: Record<string, { trains: TrainT[] }> = {};
   for (const name of lineNames) {
@@ -124,3 +129,5 @@ export function toSnapshot(trains: InferredTrain[]): SnapshotT {
   }
   return { t, lines } as SnapshotT;
 }
+
+

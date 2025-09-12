@@ -1,4 +1,4 @@
-app = "metro-backend-example"
+app = "metro-backend"
 primary_region = "ams"
 
 [build]

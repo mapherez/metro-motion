@@ -7,10 +7,10 @@ const backend = process.env.BACKEND_URL || 'http://localhost:8080';
 export default defineConfig({
   plugins: [react()],
   server: {
-    // Bind to all local interfaces (IPv4/IPv6) and fail if 5173 is taken.
+    // Bind to all local interfaces (IPv4/IPv6) and fail if 5174 is taken.
     host: '127.0.0.1',
     strictPort: true,
-    port: 5173,
+    port: 5174,
     proxy: {
       // Example usage: fetch('/api/now') -> proxied to backend
       '/api': {

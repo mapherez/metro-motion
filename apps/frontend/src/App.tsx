@@ -78,15 +78,27 @@ export function App() {
   }, [snapshot]);
   return (
     <div style={{ fontFamily: 'system-ui, sans-serif', padding: 16 }}>
-      <h1>Metro Lisboa • Live</h1>
-      <p>Static station data loaded. Next: load /now and wire SSE.</p>
-      <section style={{ marginTop: 16 }}>
+      <header style={{ position: 'sticky', top: 0, zIndex: 10, borderBottom: '1px solid #e5e7eb', padding: '10px 16px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center' }}>
+          <div />
+          <h1 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Metro Lisboa Live</h1>
+          <div style={{ textAlign: 'right', fontSize: 12, color: '#374151' }}>
+            <span>
+              {snapshot ? new Date(snapshot.t * 1000).toLocaleTimeString() : '-'}
+              {since ? ` • ${since}` : ''}
+              {loading ? ' • loading…' : ''}
+            </span>
+            {error ? (<span style={{ color: 'tomato', marginLeft: 6 }}>• {error}</span>) : null}
+          </div>
+        </div>
+      </header>      
+      {/* <section style={{ marginTop: 16 }}>
         <strong>Snapshot time:</strong>{' '}
         {snapshot ? new Date(snapshot.t * 1000).toLocaleTimeString() : '—'}
         {loading ? ' (loading...)' : ''}
         {since ? ` • ${since}` : ''}
         {error ? <span style={{ color: 'tomato' }}> • {error}</span> : null}
-      </section>
+      </section> */}
       {/* <section style={{ marginTop: 24 }}>
         <LineOrders />
       </section> */}

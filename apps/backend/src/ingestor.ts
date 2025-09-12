@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { createRedis } from './redis';
 import type { TempoEsperaResponse } from '@metro/shared-utils';
 import { normalizeTempoEspera, toSnapshot } from '@metro/shared-utils';
+import { Snapshot as SnapshotSchema } from '@metro/shared-types';
 import type { Snapshot } from '@metro/shared-types';
 
 const METRO_ENDPOINT = 'tempoEspera/Estacao/todos';
@@ -19,6 +20,60 @@ export class Ingestor {
 
   async start() {
     try {
+      if (config.metroApi.caFile) {
+        console.log(`[ingestor] ignoring METRO_CA_FILE, use NODE_EXTRA_CA_CERTS instead`);
+      }
+      // if (config.metroApi.caFile) {
+      //   // Prefer a programmatic TLS CA injection via Undici to avoid
+      //   // NODE_EXTRA_CA_CERTS being read only at process start.
+      //   try {
+      //     const __filename = fileURLToPath(import.meta.url);
+      //     const __dirnameLocal = path.dirname(__filename);
+      //     const repoRoot = path.resolve(__dirnameLocal, '../../..');
+
+      //     const caPathRaw = config.metroApi.caFile;
+      //     const candidates = new Set<string>();
+      //     // As-is (absolute or relative to CWD)
+      //     candidates.add(path.isAbsolute(caPathRaw) ? caPathRaw : path.resolve(process.cwd(), caPathRaw));
+      //     // Relative to backend package root (apps/backend)
+      //     candidates.add(path.resolve(__dirnameLocal, '..', caPathRaw));
+      //     // Relative to repo root + apps/backend
+      //     candidates.add(path.resolve(repoRoot, 'apps/backend', caPathRaw));
+
+      //     let caPem: string | undefined;
+      //     for (const p of candidates) {
+      //       try {
+      //         const buf = await readFile(p, 'utf8');
+      //         if (buf.includes('BEGIN CERTIFICATE')) {
+      //           caPem = buf;
+      //           // eslint-disable-next-line no-console
+      //           console.log(`[ingestor] Using CA bundle at: ${p}`);
+      //           break;
+      //         }
+      //       } catch {}
+      //     }
+
+      //     if (caPem) {
+      //       // Lazy import to avoid adding a hard dependency for environments without fetch
+      //       const undici = await import('undici');
+      //       // Use a custom connector so we can supply TLS CA programmatically
+      //       const buildConnector: any = (undici as any).buildConnector;
+      //       const AgentCtor: any = (undici as any).Agent;
+      //       const setGlobalDispatcher: any = (undici as any).setGlobalDispatcher;
+      //       const connector = buildConnector({ tls: { ca: caPem } });
+      //       const agent = new AgentCtor({ connect: connector });
+      //       setGlobalDispatcher(agent);
+      //     } else {
+      //       // Fallback to env var for environments where that still works
+      //       process.env.NODE_EXTRA_CA_CERTS = config.metroApi.caFile;
+      //       // eslint-disable-next-line no-console
+      //       console.warn('[ingestor] CA file not found via candidates; falling back to NODE_EXTRA_CA_CERTS.');
+      //     }
+      //   } catch (e) {
+      //     // eslint-disable-next-line no-console
+      //     console.warn('[ingestor] Failed to configure custom CA bundle:', e);
+      //   }
+      // }
       if ('connect' in this.redis && typeof (this.redis as any).connect === 'function') {
         await (this.redis as any).connect();
       }
@@ -105,11 +160,25 @@ export class Ingestor {
     try {
       const data = await this.fetchTempoEspera();
       if (data) {
-        const trains = normalizeTempoEspera(data, this.prevState, config.dwellSeconds);
-        const snapshot = toSnapshot(trains);
-        // Debug: counts
+        let snapshot: any;
+        // Accept either the raw Metro model or a pre-normalized Snapshot model
+        if (typeof (data as any).t === 'number' && typeof (data as any).lines === 'object') {
+          const parsed = SnapshotSchema.safeParse(data);
+          if (!parsed.success) {
+            throw new Error('Upstream provided invalid Snapshot shape');
+          }
+          snapshot = parsed.data;
+        } else {
+          const trains = normalizeTempoEspera(data, this.prevState, config.dwellSeconds);
+          snapshot = toSnapshot(trains);
+        }
+        // Debug: counts (derive from snapshot to support both branches)
+        const trainsCount = Object.values(snapshot.lines || {}).reduce(
+          (acc: number, line: any) => acc + ((line && line.trains && line.trains.length) || 0),
+          0
+        );
         // eslint-disable-next-line no-console
-        console.log(`[ingestor] trains=${trains.length} t=${snapshot.t}`);
+        console.log(`[ingestor] trains=${trainsCount} t=${snapshot.t}`);
         // Write to Redis (if configured)
         if (config.redis.url) {
           await (this.redis as any).set(

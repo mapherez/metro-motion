@@ -21,6 +21,7 @@ export function MetroMap() {
   const [paths, setPaths] = useState<PathMap>({});
   const [anchors, setAnchors] = useState<Record<string, Anchor[]>>({});
   const snapshot = useSnapshotStore((s) => s.snapshot);
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
   // Animation state map keyed by `${line}:${train.id}`
   type AnimState = {
     key: string;
@@ -211,8 +212,10 @@ export function MetroMap() {
         const delta = 2; // px along path
         const p0 = path.getPointAtLength?.(Math.max(0, s - delta)) as any;
         const p1 = path.getPointAtLength?.(Math.min(L, s + delta)) as any;
-        // Face toward the next station along the canonical line order
-        const forward = (iTo ?? 0) > (iFrom ?? 0);
+        // Face toward the next station based on along-path position
+        // Using tTo>tFrom ties rotation to the actual SVG path direction,
+        // avoiding mismatches when path parameterization differs from index order.
+        const forward = tTo > tFrom;
         let angleRad = Math.atan2((p1?.y ?? 0) - (p0?.y ?? 0), (p1?.x ?? 0) - (p0?.x ?? 0));
         if (!forward) angleRad += Math.PI; // flip for reverse direction
         const angle = (angleRad * 180) / Math.PI;
@@ -225,18 +228,19 @@ export function MetroMap() {
   return (
     <div
       style={{
-        width: 1000,
+        width: 1400,
         margin: '0 auto',
         border: '1px solid #4443',
         borderRadius: 8,
         position: 'relative'
       }}
-    >
+      >
       {/* Base map using canonical paths */}
       <svg
         ref={wrapperRef}
         viewBox={`0 0 ${viewBox.width} ${viewBox.height}`}
         style={{ width: '100%', height: 'auto', display: 'block' }}
+        onClick={() => setSelectedKey(null)}
       >
         {/* Lines (driven by geometry.kind) */}
         {(['azul','vermelha','amarela','verde'] as LineName[]).map((ln) => {
@@ -282,9 +286,17 @@ export function MetroMap() {
         ))}
 
         {/* Trains overlay (on top) */}
-        <g id="train-layer" style={{ pointerEvents: 'none' }}>
+        <g id="train-layer" style={{ pointerEvents: 'auto' }}>
           {trainPoints.map((tp) => (
-            <g key={tp.key} transform={`translate(${tp.xy.x},${tp.xy.y}) rotate(${tp.angle})`}>
+            <g
+              key={tp.key}
+              transform={`translate(${tp.xy.x},${tp.xy.y}) rotate(${tp.angle})`}
+              onClick={(e) => {
+                e.stopPropagation();
+                setSelectedKey(tp.key);
+              }}
+              style={{ cursor: 'pointer' }}
+            >
               {/* Simple train glyph: rounded body + nose */}
               <rect x={-8} y={-5} width={16} height={10} rx={3} fill={COLORS[tp.ln]} stroke="#111" strokeWidth={1} />
               <path d="M8,-5 L14,0 L8,5 Z" fill={COLORS[tp.ln]} stroke="#111" strokeWidth={1} />
@@ -294,6 +306,62 @@ export function MetroMap() {
             </g>
           ))}
         </g>
+
+        {/* Tooltip following selected train */}
+        {selectedKey && snapshot && (() => {
+          const tp = trainPoints.find(t => t.key === selectedKey);
+          if (!tp) return null;
+          const [ln, id] = selectedKey.split(':', 2) as [LineName, string];
+          const tr = snapshot.lines[ln]?.trains.find(t => t.id === id);
+          if (!tr) return null;
+          const nextName = stationById[tr.to]?.name || tr.to;
+          const eta = tr.etaNext;
+          const mins = Math.floor(eta / 60);
+          const secs = eta % 60;
+          const etaStr = eta === 0 ? 'arriving' : `${mins}:${secs.toString().padStart(2, '0')}`;
+
+          // Sizing params
+          const fsTitle = 9; // ~70%
+          const fsSub = 8;
+          const padX = 10; // ~20px total horizontal padding
+          const padY = 6;
+          const lineGap = 4;
+          const lineHeight1 = fsTitle + lineGap;
+          const lineHeight2 = fsSub;
+          const approx = (text: string, fs: number) => Math.max(30, text.length * fs * 0.6);
+          const wText = Math.max(approx(`Next: ${nextName}`, fsTitle), approx(`ETA: ${etaStr}`, fsSub));
+          const w = Math.ceil(wText + padX * 2);
+          const h = Math.ceil(padY * 2 + lineHeight1 + lineHeight2);
+
+          // Default position: close and centered vertically beside the train
+          let sideRight = true;
+          let boxX = tp.xy.x + 8; // closer to train
+          let boxY = tp.xy.y - h / 2;
+          // Flip to left if it would overflow to the right
+          if (boxX + w > viewBox.width) {
+            sideRight = false;
+            boxX = tp.xy.x - 8 - w;
+          }
+          // Clamp vertically within viewBox
+          if (boxY < 2) boxY = 2;
+          if (boxY + h > viewBox.height - 2) boxY = viewBox.height - h - 2;
+          return (
+            <g transform={`translate(${boxX},${boxY})`} onClick={(e) => e.stopPropagation()}>
+              {/* Box */}
+              <rect x={0} y={0} width={w} height={h} rx={6} fill="#fff" stroke="#333" strokeWidth={1} opacity={0.96} />
+              {/* Arrow pointing to the train */}
+              {sideRight ? (
+                // Arrow pointing toward the train on the left: tip at (-6, h/2)
+                <path d={`M0 ${h/2 - 4} L0 ${h/2 + 4} L-6 ${h/2} Z`} fill="#fff" stroke="#333" strokeWidth={1} />
+              ) : (
+                // Arrow pointing toward the train on the right: tip at (w+6, h/2)
+                <path d={`M${w} ${h/2 - 4} L${w} ${h/2 + 4} L${w + 6} ${h/2} Z`} fill="#fff" stroke="#333" strokeWidth={1} />
+              )}
+              <text x={padX} y={padY + fsTitle} fontSize={fsTitle} fill="#111">Next: {nextName}</text>
+              <text x={padX} y={padY + lineHeight1 + fsSub - 1} fontSize={fsSub} fill="#555">ETA: {etaStr}</text>
+            </g>
+          );
+        })()}
       </svg>
       <style>{`.station .label{opacity:0;transition:opacity .12s ease-in-out;pointer-events:none}.station:hover .label{opacity:1}`}</style>
     </div>

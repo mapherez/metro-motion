@@ -12,7 +12,8 @@ export const config = {
   corsOrigin: process.env.CORS_ORIGIN || '*',
   metroApi: {
     base: process.env.METRO_API_BASE || '',
-    key: process.env.METRO_API_KEY || ''
+    key: process.env.METRO_API_KEY || '',
+    caFile: process.env.METRO_CA_FILE || ''
   },
   pollIntervalMs: intFromEnv('POLL_INTERVAL_MS', 2000),
   dwellSeconds: intFromEnv('DWELL_SECONDS', 25),
@@ -24,4 +25,3 @@ export const config = {
     snapshotKey: process.env.REDIS_SNAPSHOT_KEY || 'metro:snapshot'
   }
 };
-
