@@ -5,7 +5,7 @@ WORKDIR /app
 # Enable pnpm
 RUN corepack enable && corepack prepare pnpm@8.15.5 --activate
 
-# Root manifests (IMPORTANT)
+# Root manifests (IMPORTANT: include root package.json so pnpm sees workspaces)
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
 
 # Package manifests for caching
@@ -14,7 +14,7 @@ COPY packages/shared-types/package.json ./packages/shared-types/
 COPY packages/shared-utils/package.json ./packages/shared-utils/
 COPY packages/station-data/package.json ./packages/station-data/
 
-# Dev install only for what we need to build the backend (+ its workspace deps)
+# Install all deps needed to build backend and its workspace deps
 RUN pnpm install --filter @metro/backend... --prod=false
 
 # Copy sources
@@ -25,6 +25,10 @@ COPY apps/backend ./apps/backend
 WORKDIR /app/apps/backend
 RUN pnpm run build
 
+# Sanity check: Fastify must exist in the built node_modules graph
+WORKDIR /app
+RUN node -e "console.log('fastify at:', require.resolve('fastify/package.json'))"
+
 
 # ---------- Runtime stage ----------
 FROM node:20-alpine AS runner
@@ -32,29 +36,17 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=8080
 
-# Enable pnpm
-RUN corepack enable && corepack prepare pnpm@8.15.5 --activate
-
-# Bring root manifests so pnpm knows the workspace
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-
-# Bring ONLY package.json for the workspaces backend depends on
-COPY packages/shared-types/package.json ./packages/shared-types/
-COPY packages/shared-utils/package.json ./packages/shared-utils/
-COPY packages/station-data/package.json ./packages/station-data/
-COPY apps/backend/package.json ./apps/backend/
-
-# Production install for backend + its deps across the workspace
-RUN pnpm install --prod --filter @metro/backend...
-
 # Copy compiled backend output
 COPY --from=build /app/apps/backend/dist ./dist
+COPY --from=build /app/apps/backend/package.json ./
 
-# Provide workspace files so pnpm's symlinks resolve at runtime
-# (lightweight: just copy sources; they’re small)
-COPY packages ./packages
+# Copy the entire workspace node_modules from build (includes .pnpm store)
+COPY --from=build /app/node_modules ./node_modules
 
-# TLS CA bundle (optional; remove if you'll mount as secret)
+# Optional: if your backend imports workspace libs at runtime, keep sources
+COPY --from=build /app/packages ./packages
+
+# TLS CA bundle (optional; remove if you’ll mount a secret instead)
 COPY infra/certs/metro-ca-bundle.pem /etc/ssl/certs/metro-ca-bundle.pem
 ENV NODE_EXTRA_CA_CERTS=/etc/ssl/certs/metro-ca-bundle.pem
 
