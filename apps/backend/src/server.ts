@@ -1,8 +1,8 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
-import { config } from './config';
+import { config } from './config.js';
 import { Snapshot as SnapshotSchema } from '@metro/shared-types';
-import { createRedis } from './redis';
+import { createRedis } from './redis.js';
 
 export function buildServer() {
   const app = Fastify({ logger: true });

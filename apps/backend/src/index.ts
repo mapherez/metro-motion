@@ -1,6 +1,6 @@
-import { buildServer } from './server';
-import { config } from './config';
-import { Ingestor } from './ingestor';
+import { buildServer } from './server.js';
+import { config } from './config.js';
+import { Ingestor } from './ingestor.js';
 
 const app = buildServer();
 

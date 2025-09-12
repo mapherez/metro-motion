@@ -1,8 +1,8 @@
-import { config } from './config';
+import { config } from './config.js';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createRedis } from './redis';
+import { createRedis } from './redis.js';
 import type { TempoEsperaResponse } from '@metro/shared-utils';
 import { normalizeTempoEspera, toSnapshot } from '@metro/shared-utils';
 import { Snapshot as SnapshotSchema } from '@metro/shared-types';
