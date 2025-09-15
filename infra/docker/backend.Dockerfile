@@ -1,54 +1,48 @@
-# ---------- Build stage ----------
-FROM node:20-alpine AS build
+# ---------- base with pnpm ----------
+FROM node:20-alpine AS base
 WORKDIR /app
-
 RUN corepack enable && corepack prepare pnpm@8.15.5 --activate
 
-# Root manifests (workspace awareness)
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
+# ---------- deps ----------
+FROM base AS deps
+WORKDIR /app
 
-# Package manifests (cache)
+# workspace manifests (cache)
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
 COPY apps/backend/package.json apps/backend/tsconfig.json ./apps/backend/
 COPY packages/shared-types/package.json ./packages/shared-types/
 COPY packages/shared-utils/package.json ./packages/shared-utils/
 COPY packages/station-data/package.json ./packages/station-data/
 
-# Dev deps para construir backend + deps do workspace
-RUN pnpm install --filter @metro/backend... --prod=false
+# install deps (with cache)
+RUN pnpm install --frozen-lockfile
 
-# Código fonte
-COPY packages ./packages
-COPY apps/backend ./apps/backend
+# ---------- build ----------
+FROM base AS build
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+# compile all packages + backend
+RUN pnpm -r build
 
-# Build do backend
-WORKDIR /app/apps/backend
-RUN pnpm run build
-
-
-# ---------- Runtime stage ----------
+# ---------- runtime ----------
 FROM node:20-alpine AS runner
-
-# Não dependemos do WORKDIR; vamos usar caminhos absolutos
 WORKDIR /app
 ENV NODE_ENV=production
-ENV PORT=8080
 
-# Copiar a store do pnpm (raiz) e os links do backend
-COPY --from=build /app/node_modules /app/node_modules
-COPY --from=build /app/apps/backend/node_modules /app/apps/backend/node_modules
-
-# Copiar o output compilado e package.json do backend
-COPY --from=build /app/apps/backend/dist /app/apps/backend/dist
-COPY --from=build /app/apps/backend/package.json /app/apps/backend/package.json
-
-# (Opcional) se importas workspaces em runtime
-COPY --from=build /app/packages /app/packages
-
-# TLS (opcional)
+# (Optional) Bundle Metro CA
 COPY infra/certs/metro-ca-bundle.pem /etc/ssl/certs/metro-ca-bundle.pem
 ENV NODE_EXTRA_CA_CERTS=/etc/ssl/certs/metro-ca-bundle.pem
 
-EXPOSE 8080
+# Copies only the necessary stuff to runtime
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/packages ./packages
+COPY --from=build /app/apps/backend/package.json ./apps/backend/package.json
+COPY --from=build /app/apps/backend/dist ./apps/backend/dist
 
-# ABSOLUTE path — não depende do WORKDIR
-CMD ["node", "/app/apps/backend/dist/index.js"]
+# Basic security: non-bot user
+RUN addgroup -S nodejs && adduser -S node -G nodejs
+USER node
+
+EXPOSE 8080
+CMD ["node", "apps/backend/dist/index.js"]

@@ -2,6 +2,10 @@
   "name": "metro-live",
   "private": true,
   "packageManager": "pnpm@8.15.5",
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=8.15.5"
+  },
   "scripts": {
     "dev": "turbo run dev --parallel",
     "build": "turbo run build",
