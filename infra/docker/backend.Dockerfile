@@ -35,7 +35,6 @@ COPY --from=build /app/apps/backend/package.json ./apps/backend/package.json
 COPY --from=build /app/apps/backend/dist ./apps/backend/dist
 
 # non-root user
-RUN addgroup -S nodejs && adduser -S node -G nodejs
 USER node
 
 EXPOSE 8080
