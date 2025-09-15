@@ -31,8 +31,8 @@ WORKDIR /app
 ENV NODE_ENV=production
 
 # (Optional) Bundle Metro CA
-COPY infra/certs/metro-ca-bundle.pem /etc/ssl/certs/metro-ca-bundle.pem
-ENV NODE_EXTRA_CA_CERTS=/etc/ssl/certs/metro-ca-bundle.pem
+# COPY infra/certs/metro-ca-bundle.pem /etc/ssl/certs/metro-ca-bundle.pem
+# ENV NODE_EXTRA_CA_CERTS=/etc/ssl/certs/metro-ca-bundle.pem
 
 # Copies only the necessary stuff to runtime
 COPY --from=build /app/node_modules ./node_modules
