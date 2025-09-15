@@ -39,8 +39,8 @@ WORKDIR /app
 ENV NODE_ENV=production
 
 # (Optional) Bundle Metro CA
-# COPY infra/certs/metro-ca-bundle.pem /etc/ssl/certs/metro-ca-bundle.pem
-# ENV NODE_EXTRA_CA_CERTS=/etc/ssl/certs/metro-ca-bundle.pem
+COPY infra/certs/metro-ca-bundle.pem /etc/ssl/certs/metro-ca-bundle.pem
+ENV NODE_EXTRA_CA_CERTS=/etc/ssl/certs/metro-ca-bundle.pem
 
 # Copiamos só o artefacto de produção gerado pelo pnpm deploy
 COPY --from=deploy /app/deploy ./
@@ -49,4 +49,4 @@ COPY --from=deploy /app/deploy ./
 USER node
 
 EXPOSE 8080
-CMD ["node", "apps/backend/dist/index.js"]
+CMD ["node", "dist/index.js"]
