@@ -1,0 +1,7 @@
+{
+  "version": 2,
+  "framework": "vite",
+  "installCommand": "pnpm i --frozen-lockfile",
+  "buildCommand": "pnpm --filter @metro/frontend build",
+  "outputDirectory": "apps/frontend/dist"
+}
