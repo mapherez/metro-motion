@@ -1,6 +1,9 @@
-node_modules
-**/node_modules
-dist
-.turbo
 .git
-.vercel
+node_modules
+dist
+**/node_modules
+**/dist
+.env
+.env.*
+Dockerfile
+infra/docker/*.Dockerfile
