@@ -20,5 +20,8 @@ export default defineConfig({
         headers: { 'X-Dev-Proxy': 'vite' }
       }
     }
+  },
+  define: {
+    'import.meta.env.VITE_API_URL': JSON.stringify(process.env.VITE_API_URL || '')
   }
 });
