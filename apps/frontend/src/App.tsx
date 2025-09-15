@@ -5,6 +5,7 @@ import { MetroMap } from './components/MetroMap';
 import { Snapshot as SnapshotSchema, type Snapshot } from '@metro/shared-types';
 
 export function App() {
+  const API_BASE = import.meta.env.BACKEND_URL;
   const { snapshot } = useSnapshotStore();
   const setSnapshot = useSnapshotStore((s) => s.setSnapshot);
   const [loading, setLoading] = useState(false);
@@ -17,7 +18,7 @@ export function App() {
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch('/api/now');
+        const res = await fetch(`${API_BASE}/now`);
         if (res.status === 204) {
           if (!cancelled) setSnapshot(null);
           return;
@@ -43,7 +44,7 @@ export function App() {
 
   // Realtime SSE
   useEffect(() => {
-    const es = new EventSource('/api/stream');
+    const es = new EventSource(`${API_BASE}/stream`);
     es.onmessage = (ev) => {
       try {
         const data = JSON.parse(ev.data);
