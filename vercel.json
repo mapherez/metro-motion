@@ -1,0 +1,13 @@
+{
+  "version": 2,
+  "framework": "vite",
+  "installCommand": "pnpm i --frozen-lockfile",
+  "buildCommand": "turbo run build --filter=@metro/frontend",
+  "outputDirectory": "apps/frontend/dist",
+  "env": {
+    "VITE_API_BASE": "https://p01--metro-motion-backend--w8sgbjkc5bty.code.run"
+  },
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/" }
+  ]
+}
