@@ -1,23 +1,37 @@
-# ---------- build ----------
-FROM node:20-alpine AS build
+# ---------- base ----------
+FROM node:20-alpine AS base
 WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@8.15.5 --activate
 
-# We copy the main manifests first to cache the install
+# ---------- build (dev deps para compilar) ----------
+FROM base AS build
+WORKDIR /app
+
+# Copiar manifests para cache
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
 COPY apps/backend/package.json apps/backend/tsconfig.json ./apps/backend/
 COPY packages/shared-types/package.json ./packages/shared-types/
 COPY packages/shared-utils/package.json ./packages/shared-utils/
 COPY packages/station-data/package.json ./packages/station-data/
 
-# Install everything with lockfile
+# Instala TUDO (dev + prod) para conseguir compilar TS
 RUN pnpm install --frozen-lockfile
 
-# Now copy the WHOLE repo (source code)
+# Copia o código
 COPY . .
 
-# 👉 Only build backend + dependencies (exclude apps/frontend)
+# Compila só o backend e dependências do workspace
 RUN pnpm -r --filter @metro/backend... build
+
+# ---------- deploy (prune para prod de 1 workspace) ----------
+FROM base AS deploy
+WORKDIR /app
+# traz a árvore completa compilada do stage build
+COPY --from=build /app /app
+
+# Cria um artefacto de produção apenas para o backend,
+# com node_modules prunado certinho e sem lixo de outros workspaces
+RUN pnpm deploy --filter @metro/backend --prod /app/deploy
 
 # ---------- runtime ----------
 FROM node:20-alpine AS runner
@@ -28,13 +42,10 @@ ENV NODE_ENV=production
 # COPY infra/certs/metro-ca-bundle.pem /etc/ssl/certs/metro-ca-bundle.pem
 # ENV NODE_EXTRA_CA_CERTS=/etc/ssl/certs/metro-ca-bundle.pem
 
-# Only the necessary
-COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/packages ./packages
-COPY --from=build /app/apps/backend/package.json ./apps/backend/package.json
-COPY --from=build /app/apps/backend/dist ./apps/backend/dist
+# Copiamos só o artefacto de produção gerado pelo pnpm deploy
+COPY --from=deploy /app/deploy ./
 
-# non-root user
+# Usa o user 'node' já existente
 USER node
 
 EXPOSE 8080
