@@ -49,4 +49,4 @@ COPY --from=deploy /app/deploy ./
 USER node
 
 EXPOSE 8080
-CMD ["sh", "-lc", "node -v; pwd; ls -la; echo '----'; ls -la dist || true; echo '----'; node -e \"import('./dist/server.js').then(m=>{console.log('exports=',Object.keys(m));}).catch(e=>console.error('require error:',e));\"; sleep 3600"]
+CMD ["node", "dist/index.js"]
