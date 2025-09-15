@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "prebuild": "pnpm -r --filter @metro/shared-types --filter @metro/station-data build",
+    "prebuild": "pnpm -w -r --filter @metro/shared-types --filter @metro/station-data build",
     "build": "tsc -b && vite build",
     "preview": "vite preview --port 5174",
     "lint": "echo 'no lint configured'"
