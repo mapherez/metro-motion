@@ -49,4 +49,4 @@ COPY --from=deploy /app/deploy ./
 USER node
 
 EXPOSE 8080
-CMD ["npm", "run", "start", "--silent"]
+CMD ["node", "dist/server.js"]
