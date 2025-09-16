@@ -5,7 +5,7 @@ import { MetroMap } from './components/MetroMap';
 import { Snapshot as SnapshotSchema, type Snapshot } from '@metro/shared-types';
 
 export function App() {
-  const API_BASE = (import.meta.env.VITE_API_BASE as string).replace(/\/$/, "");
+  const API_BASE = import.meta.env.DEV ? '/api' : import.meta.env.VITE_API_BASE;
   const { snapshot } = useSnapshotStore();
   const setSnapshot = useSnapshotStore((s) => s.setSnapshot);
   const [loading, setLoading] = useState(false);
