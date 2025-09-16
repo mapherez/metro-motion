@@ -52,7 +52,7 @@ export function buildServer() {
     }
 
     // Prepare SSE headers
-    reply.raw.setHeader('Access-Control-Allow-Origin', 'CORS_ORIGIN');
+    reply.raw.setHeader('Access-Control-Allow-Origin', config.corsOrigin);
     reply.raw.setHeader('Content-Type', 'text/event-stream');
     reply.raw.setHeader('Cache-Control', 'no-cache, no-transform');
     reply.raw.setHeader('Connection', 'keep-alive');
