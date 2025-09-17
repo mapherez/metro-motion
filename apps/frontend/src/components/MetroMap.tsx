@@ -310,10 +310,7 @@ export function MetroMap() {
   const focusHalf = TRAIN_FOCUS_SIZE / 2;
 
   return (
-    <div
-      className="relative mx-auto w-full max-w-[1400px] rounded-3xl border border-white/10 bg-[var(--bg-soft)]/70 p-4 shadow-[0_20px_60px_-30px_rgba(0,0,0,0.65)] backdrop-blur"
-      style={{ touchAction: "pan-y" }}
-    >
+    <div className="relative mx-auto w-full max-w-[1400px] rounded-3xl border border-white/10 bg-[var(--bg-soft)]/70 p-4 shadow-[0_20px_60px_-30px_rgba(0,0,0,0.65)] backdrop-blur">
       <svg
         ref={wrapperRef}
         role="img"
