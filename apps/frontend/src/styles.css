@@ -2,6 +2,15 @@
 @config "../tailwind.config.js";
 
 :root {
+  --metro-label: #25282b;
+}
+
+:root[data-theme="dark"] {
+  --metro-label: rgba(242, 244, 250, 0.92);
+}
+
+
+:root {
   color-scheme: light;
   --bg: #f8f9fb;
   --bg-soft: #ffffff;
@@ -54,4 +63,5 @@ body {
   color: var(--fg);
   font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
 }
+
 

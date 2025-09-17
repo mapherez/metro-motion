@@ -16,13 +16,16 @@ const desktopMapStyle: CSSProperties = {
   height: "calc(100dvh - var(--shell-header-height, 0px) - var(--shell-footer-height, 0px))",
   minHeight: "calc(100dvh - var(--shell-header-height, 0px) - var(--shell-footer-height, 0px))",
   overflow: "hidden",
+  flexDirection: "column",
 };
 
 export function Home() {
   return (
-    <div className="h-full">
-      <div className="hidden md:block" style={desktopMapStyle}>
-        <MetroMap />
+    <div className="flex h-full flex-col">
+      <div className="hidden md:flex-1 md:block" style={desktopMapStyle}>
+        <div className="flex h-full flex-1">
+          <MetroMap />
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-4 p-4 md:hidden">

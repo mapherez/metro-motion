@@ -363,7 +363,7 @@ export function MetroMap() {
               return (
                 <g key={`station-${ln}-${anchor.stopId}`} className="station" transform={`translate(${dx},${dy})`}>
                   <circle r={5} fill="#fff" stroke={COLORS[ln]} strokeWidth={4} />
-                  <text className="label" x={lx} y={ly} fontSize={10} fill="#25282B">
+                  <text className="label" x={lx} y={ly} fontSize={10} fill="var(--metro-label)">
                     {info?.name ?? anchor.stopId}
                   </text>
                 </g>
@@ -524,6 +524,7 @@ export function MetroMap() {
     </div>
   );
 }
+
 
 
 

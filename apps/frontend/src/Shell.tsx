@@ -8,19 +8,23 @@ export function Shell() {
   const { theme, toggleTheme, snapshot, sinceText, loading, error } = useShellContext();
   const headerRef = useRef<HTMLElement | null>(null);
   const footerRef = useRef<HTMLElement | null>(null);
+  const tabBarRef = useRef<HTMLElement | null>(null);
   const [headerHeight, setHeaderHeight] = useState<number>(68);
   const [footerHeight, setFooterHeight] = useState<number>(0);
+  const [tabBarHeight, setTabBarHeight] = useState<number>(48);
 
   useEffect(() => {
     const update = () => {
       setHeaderHeight(headerRef.current?.getBoundingClientRect().height ?? 68);
       setFooterHeight(footerRef.current?.getBoundingClientRect().height ?? 0);
+      setTabBarHeight(tabBarRef.current?.getBoundingClientRect().height ?? 0);
     };
 
     update();
 
     const headerEl = headerRef.current;
     const footerEl = footerRef.current;
+    const tabBarEl = tabBarRef.current;
     const observers: ResizeObserver[] = [];
 
     if (headerEl) {
@@ -35,6 +39,12 @@ export function Shell() {
       observers.push(footerObserver);
     }
 
+    if (tabBarEl) {
+      const navObserver = new ResizeObserver(() => update());
+      navObserver.observe(tabBarEl);
+      observers.push(navObserver);
+    }
+
     const onResize = () => update();
     window.addEventListener("resize", onResize, { passive: true });
 
@@ -47,11 +57,29 @@ export function Shell() {
   const layoutVars = useMemo(() => {
     const headerValue = Number.isFinite(headerHeight) ? `${headerHeight}px` : SHELL_HEIGHT_FALLBACK;
     const footerValue = Number.isFinite(footerHeight) ? `${footerHeight}px` : "0px";
+    const tabValue = Number.isFinite(tabBarHeight) ? `${tabBarHeight}px` : "0px";
     return {
       "--shell-header-height": headerValue,
       "--shell-footer-height": footerValue,
+      "--shell-tabbar-height": tabValue,
     } as CSSProperties;
-  }, [headerHeight, footerHeight]);
+  }, [headerHeight, footerHeight, tabBarHeight]);
+
+  const mainStyle = useMemo(() => {
+    const safeHeader = Number.isFinite(headerHeight) ? headerHeight : 68;
+    const safeFooter = Number.isFinite(footerHeight) ? footerHeight : 0;
+    const safeTab = Number.isFinite(tabBarHeight) ? tabBarHeight : 0;
+    const baseHeight = `calc(100dvh - ${safeHeader}px - ${safeFooter}px - ${safeTab}px)`;
+    const style: CSSProperties = {
+      minHeight: baseHeight,
+      paddingBottom: `${safeTab}px`,
+      WebkitOverflowScrolling: "touch",
+    };
+    if (safeTab <= 0) {
+      style.height = baseHeight;
+    }
+    return style;
+  }, [headerHeight, footerHeight, tabBarHeight]);
 
   const lastUpdated = snapshot ? new Date(snapshot.t * 1000).toLocaleTimeString() : "--";
   const statusBits: string[] = [];
@@ -85,7 +113,7 @@ export function Shell() {
   const themeText = theme === "dark" ? "Dark" : "Light";
 
   return (
-    <div className="min-h-dvh bg-[var(--bg)] text-[var(--fg)]" style={layoutVars}>
+    <div className="flex min-h-dvh flex-col bg-[var(--bg)] text-[var(--fg)]" style={layoutVars}>
       <header
         ref={headerRef}
         className="sticky top-0 z-10 border-b border-white/10 bg-[var(--bg)]/80 backdrop-blur"
@@ -104,7 +132,7 @@ export function Shell() {
               onClick={toggleTheme}
               aria-label={themeLabel}
               aria-pressed={theme === "light"}
-              className={`flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-[var(--bg-soft)] text-sm font-semibold ${commonFocus}`}
+              className={`cursor-pointer flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-[var(--bg-soft)] text-sm font-semibold ${commonFocus}`}
             >
               {themeText}
             </button>
@@ -118,13 +146,13 @@ export function Shell() {
         </div>
       </header>
 
-      <main className="relative min-h-0">
+      <main className="relative flex-1 min-h-0 overflow-y-auto md:overflow-visible" style={mainStyle}>
         <Outlet />
       </main>
 
       <footer
         ref={footerRef}
-        className="hidden border-t border-white/10 md:block"
+        className="hidden md:block sticky bottom-0 border-t border-white/10 bg-[var(--bg)]/80 backdrop-blur"
       >
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-6 px-4 py-6 text-sm text-muted">
           <div>{`Copyright (c) ${year} Mapherez - Metro Lisboa Live`}</div>
@@ -157,7 +185,7 @@ export function Shell() {
         </div>
       </footer>
 
-      <nav className="fixed bottom-0 left-0 right-0 border-t border-white/10 bg-[var(--bg-soft)] md:hidden">
+      <nav ref={tabBarRef} className="fixed bottom-0 left-0 right-0 border-t border-white/10 bg-[var(--bg-soft)] md:hidden">
         <div className="grid grid-cols-2">
           <NavLink to="/" className={mobileNavClass} end>
             Home
@@ -167,7 +195,7 @@ export function Shell() {
           </NavLink>
         </div>
       </nav>
-      <div className="h-12 md:hidden" />
+      <div className="md:hidden" style={{ height: "var(--shell-tabbar-height, 3rem)" }} />
     </div>
   );
 }
