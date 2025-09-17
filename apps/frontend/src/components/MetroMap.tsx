@@ -297,12 +297,13 @@ export function MetroMap() {
               }}
               style={{ cursor: 'pointer' }}
             >
-              {/* Simple train glyph: rounded body + nose */}
-              <rect x={-8} y={-5} width={16} height={10} rx={3} fill={COLORS[tp.ln]} stroke="#111" strokeWidth={1} />
-              <path d="M8,-5 L14,0 L8,5 Z" fill={COLORS[tp.ln]} stroke="#111" strokeWidth={1} />
+              {/* body */}
+              <rect x={-10} y={-6} width={20} height={12} rx={4} fill={COLORS[tp.ln]} stroke="#111" strokeWidth={1}/>
               {/* windows */}
-              <rect x={-4} y={-2.5} width={3} height={5} rx={1} fill="#fff" opacity={0.85} />
-              <rect x={0} y={-2.5} width={3} height={5} rx={1} fill="#fff" opacity={0.85} />
+              <rect x={-5.5} y={-3} width={3.5} height={6} rx={1} fill="#fff" opacity="0.9"/>
+              <rect x={-1} y={-3} width={3.5} height={6} rx={1} fill="#fff" opacity="0.9"/>
+              {/* headlight */}
+              <circle cx="10" cy="0" r="1.4" fill="#fff" stroke="#111" strokeWidth={1}/>
             </g>
           ))}
         </g>
