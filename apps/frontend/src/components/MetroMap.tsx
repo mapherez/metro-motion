@@ -1,41 +1,80 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { lineOrder, lineNames } from '@metro/station-data';
-import type { LineName } from '@metro/station-data';
-import { stationById } from '@metro/station-data/stations';
-import { linePaths, viewBox } from '@metro/station-data/geometry';
-import { useSnapshotStore } from '../state';
+import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react";
+import { lineOrder, lineNames } from "@metro/station-data";
+import type { LineName } from "@metro/station-data";
+import { stationById } from "@metro/station-data/stations";
+import { linePaths, viewBox } from "@metro/station-data/geometry";
+import { useSnapshotStore } from "../state";
 
 type XY = { x: number; y: number };
 type PathMap = Partial<Record<LineName, SVGPathElement>>;
 type Anchor = { stopId: string; pos: number; xy: XY };
 
-const COLORS: Record<string, string> = {
-  verde: '#07AC56',
-  amarela: '#FFB83B',
-  azul: '#467DED',
-  vermelha: '#E7343F'
+type AnimState = {
+  key: string;
+  ln: LineName;
+  from: string;
+  to: string;
+  startProgress: number;
+  startAtMs: number;
+  endAtMs: number;
+};
+
+const COLORS: Record<LineName, string> = {
+  azul: "#467DED",
+  amarela: "#FFB83B",
+  verde: "#07AC56",
+  vermelha: "#E7343F",
+};
+
+const LINE_LABEL: Record<LineName, string> = {
+  azul: "Azul",
+  amarela: "Amarela",
+  verde: "Verde",
+  vermelha: "Vermelha",
+};
+
+const RAF_INTERVAL = 1000 / 60;
+const TRAIN_FOCUS_SIZE = 44;
+
+const clamp = (value: number, min: number, max: number) =>
+  Math.max(min, Math.min(max, value));
+
+function formatEtaShort(raw: number | undefined | null): string {
+  if (raw == null || Number.isNaN(raw)) return "--";
+  if (raw <= 0) return "arriving";
+  const minutes = Math.floor(raw / 60);
+  const seconds = Math.floor(raw % 60);
+  return minutes > 0
+    ? `${minutes}m ${seconds.toString().padStart(2, "0")}s`
+    : `${seconds}s`;
+}
+
+function formatEtaAnnounce(raw: number | undefined | null): string {
+  if (raw == null || Number.isNaN(raw)) return "time unknown";
+  if (raw <= 0) return "arriving now";
+  const minutes = Math.floor(raw / 60);
+  const seconds = Math.floor(raw % 60);
+  if (minutes > 0 && seconds > 0) {
+    return `arriving in ${minutes} minutes and ${seconds} seconds`;
+  }
+  if (minutes > 0) return `arriving in ${minutes} minutes`;
+  return `arriving in ${seconds} seconds`;
+}
+
+const easeInOut = (u: number) => {
+  const x = clamp(u, 0, 1);
+  return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
 };
 
 export function MetroMap() {
-  const wrapperRef = useRef<SVGSVGElement>(null);
+  const wrapperRef = useRef<SVGSVGElement | null>(null);
   const [paths, setPaths] = useState<PathMap>({});
   const [anchors, setAnchors] = useState<Record<string, Anchor[]>>({});
   const snapshot = useSnapshotStore((s) => s.snapshot);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  // Animation state map keyed by `${line}:${train.id}`
-  type AnimState = {
-    key: string;
-    ln: LineName;
-    from: string;
-    to: string;
-    startProgress: number; // progress at startAtMs (0..1)
-    startAtMs: number;
-    endAtMs: number; // target progress 1 at this time
-  };
   const animRef = useRef<Map<string, AnimState>>(new Map());
-  const [tick, setTick] = useState(0); // rAF ticker
+  const [tick, setTick] = useState(0);
 
-  // Collect path elements
   useEffect(() => {
     const svg = wrapperRef.current;
     if (!svg) return;
@@ -43,328 +82,454 @@ export function MetroMap() {
       azul: (svg.querySelector(`#${linePaths.azul.id}`) as SVGPathElement) || undefined,
       vermelha: (svg.querySelector(`#${linePaths.vermelha.id}`) as SVGPathElement) || undefined,
       amarela: (svg.querySelector(`#${linePaths.amarela.id}`) as SVGPathElement) || undefined,
-      verde: (svg.querySelector(`#${linePaths.verde.id}`) as SVGPathElement) || undefined
+      verde: (svg.querySelector(`#${linePaths.verde.id}`) as SVGPathElement) || undefined,
     };
     setPaths(map);
   }, []);
 
-  // Build anchors using measured projection when possible, else evenly spaced
   useEffect(() => {
-    const svg = wrapperRef.current;
-    const res: Record<string, Anchor[]> = {};
+    const result: Record<string, Anchor[]> = {};
     for (const ln of lineNames as LineName[]) {
       const path = paths[ln];
       if (!path) continue;
       const stops = lineOrder[ln];
-      const L = path.getTotalLength?.() ?? 0;
-      const arr: Anchor[] = [];
+      const length = path.getTotalLength?.() ?? 0;
+      const anchorsForLine: Anchor[] = [];
 
-      // Prefer explicit positions from stationById (generated), else fallback to even spacing
       const dotsById = new Map<string, XY>();
-      for (const sid of stops) {
-        const info = stationById[sid];
-        if (info?.cx != null && info?.cy != null) dotsById.set(sid, { x: info.cx, y: info.cy });
+      for (const stopId of stops) {
+        const info = stationById[stopId];
+        if (info?.cx != null && info?.cy != null) {
+          dotsById.set(stopId, { x: info.cx, y: info.cy });
+        }
       }
 
-      // Project a point to t = s/L along the path
-      const projectToT = (p: XY): number => {
+      const projectToT = (point: XY): number => {
         const steps = 400;
         let bestS = 0;
-        let bestD = Number.POSITIVE_INFINITY;
+        let bestDistance = Number.POSITIVE_INFINITY;
         for (let i = 0; i <= steps; i++) {
-          const s = (i / steps) * L;
-          const pt = path.getPointAtLength?.(s) as any;
-          const dx = (pt?.x ?? 0) - p.x;
-          const dy = (pt?.y ?? 0) - p.y;
+          const s = (i / steps) * length;
+          const pt = path.getPointAtLength?.(s) as SVGPoint | undefined;
+          const dx = (pt?.x ?? 0) - point.x;
+          const dy = (pt?.y ?? 0) - point.y;
           const d2 = dx * dx + dy * dy;
-          if (d2 < bestD) { bestD = d2; bestS = s; }
+          if (d2 < bestDistance) {
+            bestDistance = d2;
+            bestS = s;
+          }
         }
-        return L > 0 ? bestS / L : 0;
+        return length > 0 ? bestS / length : 0;
       };
 
-      const segs = Math.max(stops.length - 1, 1);
+      const segments = Math.max(stops.length - 1, 1);
       for (let i = 0; i < stops.length; i++) {
         const stopId = stops[i];
-        let t = segs === 0 ? 0 : i / segs;
+        let t = segments === 0 ? 0 : i / segments;
         const dot = dotsById.get(stopId);
         if (dot) t = projectToT(dot);
-        const s = t * L;
-        const pt = path.getPointAtLength?.(s) as any;
-        arr.push({ stopId, pos: t, xy: { x: pt?.x ?? 0, y: pt?.y ?? 0 } });
+        const s = t * length;
+        const pt = path.getPointAtLength?.(s) as SVGPoint | undefined;
+        anchorsForLine.push({ stopId, pos: t, xy: { x: pt?.x ?? 0, y: pt?.y ?? 0 } });
       }
-      res[ln] = arr;
+      result[ln] = anchorsForLine;
     }
-    setAnchors(res);
+    setAnchors(result);
   }, [paths]);
 
-  // rAF loop at ~30fps to drive animation
   useEffect(() => {
     let raf = 0;
+    let running = false;
     let last = 0;
-    const frame = (t: number) => {
-      if (t - last >= 1000 / 30) {
-        setTick((x) => (x + 1) & 1023);
-        last = t;
+
+    const step = (time: number) => {
+      if (!running) return;
+      if (time - last >= RAF_INTERVAL) {
+        setTick((value) => (value + 1) & 1023);
+        last = time;
       }
-      raf = requestAnimationFrame(frame);
+      raf = requestAnimationFrame(step);
     };
-    raf = requestAnimationFrame(frame);
-    return () => cancelAnimationFrame(raf);
+
+    const start = () => {
+      if (running) return;
+      running = true;
+      last = performance.now();
+      raf = requestAnimationFrame(step);
+    };
+
+    const stop = () => {
+      if (!running) return;
+      running = false;
+      cancelAnimationFrame(raf);
+    };
+
+    const handleVisibility = () => {
+      if (document.hidden) {
+        stop();
+      } else {
+        start();
+      }
+    };
+
+    start();
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+      stop();
+    };
   }, []);
 
-  // Ease in-out for smoother accel/brake
-  const easeInOut = (u: number) => {
-    const x = Math.max(0, Math.min(1, u));
-    return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
-  };
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setSelectedKey(null);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
-  // Sync/adjust animation state whenever a new snapshot arrives
   useEffect(() => {
     if (!snapshot) return;
     const nowMs = performance.now();
     const ageSec = Math.max(0, Date.now() / 1000 - snapshot.t);
     const nextKeys = new Set<string>();
+
     for (const ln of lineNames as LineName[]) {
       const trains = snapshot.lines[ln]?.trains || [];
-      for (const tr of trains) {
-        const key = `${ln}:${tr.id}`;
+      for (const train of trains) {
+        const key = `${ln}:${train.id}`;
         nextKeys.add(key);
         const prev = animRef.current.get(key);
-        const remainingSec = Math.max(0.3, tr.etaNext - ageSec);
-        const frac = tr.etaNext > 0 ? Math.min(ageSec, tr.etaNext) / tr.etaNext : 0;
-        const pNow = Math.max(0, Math.min(1, tr.progress01 + (1 - tr.progress01) * frac));
-        if (!prev || prev.from !== tr.from || prev.to !== tr.to) {
-          // New segment or new train: start from current predicted progress to arrival at 1
+        const remainingSec = Math.max(0.3, train.etaNext - ageSec);
+        const frac = train.etaNext > 0 ? Math.min(ageSec, train.etaNext) / train.etaNext : 0;
+        const predicted = clamp(train.progress01 + (1 - train.progress01) * frac, 0, 1);
+
+        if (!prev || prev.from !== train.from || prev.to !== train.to) {
           animRef.current.set(key, {
             key,
             ln,
-            from: tr.from,
-            to: tr.to,
-            startProgress: pNow,
+            from: train.from,
+            to: train.to,
+            startProgress: predicted,
             startAtMs: nowMs,
-            endAtMs: nowMs + remainingSec * 1000
+            endAtMs: nowMs + remainingSec * 1000,
           });
         } else {
-          // Same segment: resync speed and target with latest ETA
-          const dur = prev.endAtMs - prev.startAtMs || 1;
-          const u = Math.max(0, Math.min(1, (nowMs - prev.startAtMs) / dur));
-          const cur = prev.startProgress + (1 - prev.startProgress) * easeInOut(u);
+          const duration = Math.max(1, prev.endAtMs - prev.startAtMs);
+          const u = clamp((nowMs - prev.startAtMs) / duration, 0, 1);
+          const current = prev.startProgress + (1 - prev.startProgress) * easeInOut(u);
           animRef.current.set(key, {
             key,
             ln,
-            from: tr.from,
-            to: tr.to,
-            startProgress: Math.max(cur, pNow * 0.98), // avoid snapping backward
+            from: train.from,
+            to: train.to,
+            startProgress: Math.max(current, predicted * 0.98),
             startAtMs: nowMs,
-            endAtMs: nowMs + Math.max(300, remainingSec * 1000)
+            endAtMs: nowMs + Math.max(300, remainingSec * 1000),
           });
         }
       }
     }
-    // Prune trains no longer present
-    for (const k of Array.from(animRef.current.keys())) {
-      if (!nextKeys.has(k)) animRef.current.delete(k);
+
+    for (const key of Array.from(animRef.current.keys())) {
+      if (!nextKeys.has(key)) {
+        animRef.current.delete(key);
+      }
     }
   }, [snapshot]);
 
-  // When a segment finishes before the next snapshot, dwell at station and wait for next data
   useEffect(() => {
     const now = performance.now();
-    const DWELL_MS = 1200; // brief stop at stations
-    for (const st of Array.from(animRef.current.values())) {
-      const dur = Math.max(1, st.endAtMs - st.startAtMs);
-      const u = (now - st.startAtMs) / dur;
+    const DWELL_MS = 1200;
+    for (const state of Array.from(animRef.current.values())) {
+      const duration = Math.max(1, state.endAtMs - state.startAtMs);
+      const u = (now - state.startAtMs) / duration;
       if (u < 1) continue;
-      // Hold at the station briefly; next snapshot will provide the next leg
-      animRef.current.set(st.key, {
-        ...st,
+      animRef.current.set(state.key, {
+        ...state,
         startProgress: 1,
         startAtMs: now,
-        endAtMs: now + DWELL_MS
+        endAtMs: now + DWELL_MS,
       });
     }
   }, [tick]);
 
-  // Train positions along curves (animated)
   const trainPoints = useMemo(() => {
-    const out: Array<{ key: string; ln: string; xy: XY; angle: number }> = [];
+    const out: Array<{ key: string; ln: LineName; xy: XY; angle: number }> = [];
+    const now = performance.now();
     for (const ln of lineNames as LineName[]) {
       const path = paths[ln];
-      const a = anchors[ln];
-      if (!path || !a || a.length === 0) continue;
-      const L = path.getTotalLength?.() ?? 0;
+      const anchorsForLine = anchors[ln];
+      if (!path || !anchorsForLine || anchorsForLine.length === 0) continue;
+      const length = path.getTotalLength?.() ?? 0;
       const indexMap = new Map<string, number>();
-      a.forEach((an, idx) => indexMap.set(an.stopId, idx));
-      // Pull current anim states for this line
-      for (const st of animRef.current.values()) {
-        if (st.ln !== ln) continue;
-        const iFrom = indexMap.get(st.from);
-        const iTo = indexMap.get(st.to);
+      anchorsForLine.forEach((anchor, idx) => indexMap.set(anchor.stopId, idx));
+
+      for (const state of animRef.current.values()) {
+        if (state.ln !== ln) continue;
+        const iFrom = indexMap.get(state.from);
+        const iTo = indexMap.get(state.to);
         if (iFrom == null || iTo == null) continue;
-        const u = (performance.now() - st.startAtMs) / Math.max(1, st.endAtMs - st.startAtMs);
-        const prog = Math.max(0, Math.min(1, st.startProgress + (1 - st.startProgress) * easeInOut(u)));
-        const tFrom = a[iFrom].pos;
-        const tTo = a[iTo].pos;
-        const t = tFrom + (tTo - tFrom) * prog;
-        const s = t * L;
-        const pt = path.getPointAtLength?.(s) as any;
-        // Approximate tangent angle for marker rotation
-        const delta = 2; // px along path
-        const p0 = path.getPointAtLength?.(Math.max(0, s - delta)) as any;
-        const p1 = path.getPointAtLength?.(Math.min(L, s + delta)) as any;
-        // Face toward the next station based on along-path position
-        // Using tTo>tFrom ties rotation to the actual SVG path direction,
-        // avoiding mismatches when path parameterization differs from index order.
+
+        const u = (now - state.startAtMs) / Math.max(1, state.endAtMs - state.startAtMs);
+        const progress = clamp(
+          state.startProgress + (1 - state.startProgress) * easeInOut(u),
+          0,
+          1
+        );
+        const tFrom = anchorsForLine[iFrom].pos;
+        const tTo = anchorsForLine[iTo].pos;
+        const t = tFrom + (tTo - tFrom) * progress;
+        const s = t * length;
+        const point = path.getPointAtLength?.(s) as SVGPoint | undefined;
+
+        const delta = 2;
+        const p0 = path.getPointAtLength?.(Math.max(0, s - delta)) as SVGPoint | undefined;
+        const p1 = path.getPointAtLength?.(Math.min(length, s + delta)) as SVGPoint | undefined;
         const forward = tTo > tFrom;
         let angleRad = Math.atan2((p1?.y ?? 0) - (p0?.y ?? 0), (p1?.x ?? 0) - (p0?.x ?? 0));
-        if (!forward) angleRad += Math.PI; // flip for reverse direction
+        if (!forward) angleRad += Math.PI;
         const angle = (angleRad * 180) / Math.PI;
-        out.push({ key: st.key, ln, xy: { x: pt?.x ?? 0, y: pt?.y ?? 0 }, angle });
+        out.push({ key: state.key, ln, xy: { x: point?.x ?? 0, y: point?.y ?? 0 }, angle });
       }
     }
     return out;
   }, [paths, anchors, tick]);
 
+  useEffect(() => {
+    if (!selectedKey) return;
+    const exists = trainPoints.some((tp) => tp.key === selectedKey);
+    if (!exists) {
+      setSelectedKey(null);
+    }
+  }, [trainPoints, selectedKey]);
+
+  const focusHalf = TRAIN_FOCUS_SIZE / 2;
+
   return (
     <div
-      style={{
-        width: 1400,
-        margin: '0 auto',
-        border: '1px solid #4443',
-        borderRadius: 8,
-        position: 'relative'
-      }}
-      >
-      {/* Base map using canonical paths */}
+      className="relative mx-auto w-full max-w-[1400px] rounded-3xl border border-white/10 bg-[var(--bg-soft)]/70 p-4 shadow-[0_20px_60px_-30px_rgba(0,0,0,0.65)] backdrop-blur"
+      style={{ touchAction: "pan-y" }}
+    >
       <svg
         ref={wrapperRef}
+        role="img"
+        aria-label="Mapa do Metro de Lisboa"
         viewBox={`0 0 ${viewBox.width} ${viewBox.height}`}
-        style={{ width: '100%', height: 'auto', display: 'block' }}
+        className="block h-auto w-full select-none"
         onClick={() => setSelectedKey(null)}
       >
-        {/* Lines (driven by geometry.kind) */}
-        {(['azul','vermelha','amarela','verde'] as LineName[]).map((ln) => {
-          const lp = linePaths[ln];
+        <defs>
+          <radialGradient id="hl">
+            <stop offset="0%" stopColor="#fff" />
+            <stop offset="100%" stopColor="#fff" stopOpacity={0} />
+          </radialGradient>
+        </defs>
+
+        {(["azul", "vermelha", "amarela", "verde"] as LineName[]).map((ln) => {
+          const pathDef = linePaths[ln];
           const color = COLORS[ln];
-          if (lp.kind === 'stroke') {
+          if (pathDef.kind === "stroke") {
             return (
               <path
                 key={ln}
-                id={lp.id}
-                d={lp.d}
+                id={pathDef.id}
+                d={pathDef.d}
                 stroke={color}
                 strokeWidth={8}
                 fill="none"
                 strokeLinecap="round"
                 strokeLinejoin="round"
+                pointerEvents="none"
               />
             );
           }
-          return <path key={ln} id={lp.id} d={lp.d} fill={color} />;
+          return <path key={ln} id={pathDef.id} d={pathDef.d} fill={color} pointerEvents="none" />;
         })}
 
-        {/* Station dots + hover labels using anchors */}
-        {(lineNames as LineName[]).map((ln: LineName) => (
+        {(lineNames as LineName[]).map((ln) => (
           <g key={`stations-${ln}`}>
-            {(anchors[ln] || []).map((an) => {
-              const info = stationById[an.stopId];
-              const dx = info?.cx ?? an.xy.x;
-              const dy = info?.cy ?? an.xy.y;
-              // Label absolute placement (fallback to offset if not provided)
-              const lxAbs = info?.labelX ?? dx + 8;
-              const lyAbs = info?.labelY ?? dy - 8;
-              const lx = lxAbs - dx;
-              const ly = lyAbs - dy;
+            {(anchors[ln] || []).map((anchor) => {
+              const info = stationById[anchor.stopId];
+              const dx = info?.cx ?? anchor.xy.x;
+              const dy = info?.cy ?? anchor.xy.y;
+              const labelXAbs = info?.labelX ?? dx + 8;
+              const labelYAbs = info?.labelY ?? dy - 8;
+              const lx = labelXAbs - dx;
+              const ly = labelYAbs - dy;
               return (
-                <g key={`st-${ln}-${an.stopId}`} className="station" transform={`translate(${dx},${dy})`}>
+                <g key={`station-${ln}-${anchor.stopId}`} className="station" transform={`translate(${dx},${dy})`}>
                   <circle r={5} fill="#fff" stroke={COLORS[ln]} strokeWidth={4} />
-                  <text className="label" x={lx} y={ly} fontSize={10} fill="#25282B">{info?.name ?? an.stopId}</text>
+                  <text className="label" x={lx} y={ly} fontSize={10} fill="#25282B">
+                    {info?.name ?? anchor.stopId}
+                  </text>
                 </g>
               );
             })}
           </g>
         ))}
 
-        {/* Trains overlay (on top) */}
-        <g id="train-layer" style={{ pointerEvents: 'auto' }}>
-          {trainPoints.map((tp) => (
-            <g
-              key={tp.key}
-              transform={`translate(${tp.xy.x},${tp.xy.y}) rotate(${tp.angle})`}
-              onClick={(e) => {
-                e.stopPropagation();
-                setSelectedKey(tp.key);
-              }}
-              style={{ cursor: 'pointer' }}
-            >
-              {/* body */}
-              <rect x={-10} y={-6} width={20} height={12} rx={4} fill={COLORS[tp.ln]} stroke="#111" strokeWidth={1}/>
-              {/* windows */}
-              <rect x={-5.5} y={-3} width={3.5} height={6} rx={1} fill="#fff" opacity="0.9"/>
-              <rect x={-1} y={-3} width={3.5} height={6} rx={1} fill="#fff" opacity="0.9"/>
-              {/* headlight */}
-              <circle cx="10" cy="0" r="1.4" fill="#fff" stroke="#111" strokeWidth={1}/>
-            </g>
-          ))}
+        <g id="train-layer" style={{ pointerEvents: "auto" }}>
+          {trainPoints.map((tp) => {
+            const [lineId, trainId] = tp.key.split(":", 2) as [LineName, string];
+            const meta = snapshot?.lines[lineId]?.trains.find((train) => train.id === trainId);
+            const destination = meta ? stationById[meta.to]?.name ?? meta.to : "destino desconhecido";
+            const etaSeconds = meta?.etaNext;
+            const ariaLabel = `Train on line ${LINE_LABEL[lineId]} to ${destination}, ${formatEtaAnnounce(etaSeconds)}.`;
+            const pressed = selectedKey === tp.key;
+
+            return (
+              <g
+                key={tp.key}
+                transform={`translate(${tp.xy.x},${tp.xy.y}) rotate(${tp.angle})`}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setSelectedKey(tp.key);
+                  if (event.detail > 0) {
+                    event.currentTarget.blur();
+                  }
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    setSelectedKey(tp.key);
+                  }
+                }}
+                onFocus={() => setSelectedKey(tp.key)}
+                role="button"
+                tabIndex={0}
+                aria-label={ariaLabel}
+                aria-pressed={pressed}
+                className="train-marker"
+                style={{
+                  cursor: "pointer",
+                  outline: "none",
+                  "--focus-ring": COLORS[lineId],
+                } as CSSProperties}
+              >
+                <rect
+                  className="focus-target"
+                  x={-focusHalf}
+                  y={-focusHalf}
+                  width={TRAIN_FOCUS_SIZE}
+                  height={TRAIN_FOCUS_SIZE}
+                  rx={12}
+                  fill="transparent"
+                  stroke="transparent"
+                  strokeWidth={2}
+                />
+                <rect
+                  x={-10}
+                  y={-6}
+                  width={20}
+                  height={12}
+                  rx={4}
+                  fill={COLORS[tp.ln]}
+                  stroke="#111"
+                  strokeWidth={1}
+                />
+                <rect x={-5.5} y={-3} width={3.5} height={6} rx={1} fill="#fff" opacity={0.9} />
+                <rect x={-1} y={-3} width={3.5} height={6} rx={1} fill="#fff" opacity={0.9} />
+                <circle cx={10} cy={0} r={1.4} fill="#fff" stroke="#111" strokeWidth={1} />
+              </g>
+            );
+          })}
         </g>
 
-        {/* Tooltip following selected train */}
         {selectedKey && snapshot && (() => {
-          const tp = trainPoints.find(t => t.key === selectedKey);
-          if (!tp) return null;
-          const [ln, id] = selectedKey.split(':', 2) as [LineName, string];
-          const tr = snapshot.lines[ln]?.trains.find(t => t.id === id);
-          if (!tr) return null;
-          const nextName = stationById[tr.to]?.name || tr.to;
-          const eta = tr.etaNext;
-          const mins = Math.floor(eta / 60);
-          const secs = eta % 60;
-          const etaStr = eta === 0 ? 'arriving' : `${mins}:${secs.toString().padStart(2, '0')}`;
+          const trainPoint = trainPoints.find((item) => item.key === selectedKey);
+          if (!trainPoint) return null;
+          const [lineId, trainId] = selectedKey.split(":", 2) as [LineName, string];
+          const train = snapshot.lines[lineId]?.trains.find((item) => item.id === trainId);
+          if (!train) return null;
 
-          // Sizing params
-          const fsTitle = 9; // ~70%
-          const fsSub = 8;
-          const padX = 10; // ~20px total horizontal padding
-          const padY = 6;
-          const lineGap = 4;
-          const lineHeight1 = fsTitle + lineGap;
-          const lineHeight2 = fsSub;
-          const approx = (text: string, fs: number) => Math.max(30, text.length * fs * 0.6);
-          const wText = Math.max(approx(`Next: ${nextName}`, fsTitle), approx(`ETA: ${etaStr}`, fsSub));
-          const w = Math.ceil(wText + padX * 2);
-          const h = Math.ceil(padY * 2 + lineHeight1 + lineHeight2);
+          const etaShort = formatEtaShort(train.etaNext);
+          const nextName = stationById[train.to]?.name ?? train.to;
 
-          // Default position: close and centered vertically beside the train
+          const title = `Next: ${nextName}`;
+          const subtitle = `ETA: ${etaShort}`;
+
+          const fontTitle = 9;
+          const fontSubtitle = 8;
+          const padX = 12;
+          const padY = 8;
+          const gap = 4;
+          const approx = (text: string, size: number) => Math.max(40, text.length * size * 0.62);
+          const width = Math.ceil(Math.max(approx(title, fontTitle), approx(subtitle, fontSubtitle)) + padX * 2);
+          const height = Math.ceil(padY * 2 + fontTitle + gap + fontSubtitle);
+
           let sideRight = true;
-          let boxX = tp.xy.x + 8; // closer to train
-          let boxY = tp.xy.y - h / 2;
-          // Flip to left if it would overflow to the right
-          if (boxX + w > viewBox.width) {
+          let boxX = trainPoint.xy.x + 10;
+          let boxY = trainPoint.xy.y - height / 2;
+          if (boxX + width > viewBox.width) {
             sideRight = false;
-            boxX = tp.xy.x - 8 - w;
+            boxX = trainPoint.xy.x - 10 - width;
           }
-          // Clamp vertically within viewBox
-          if (boxY < 2) boxY = 2;
-          if (boxY + h > viewBox.height - 2) boxY = viewBox.height - h - 2;
+          boxY = clamp(boxY, 2, viewBox.height - height - 2);
+
           return (
-            <g transform={`translate(${boxX},${boxY})`} onClick={(e) => e.stopPropagation()}>
-              {/* Box */}
-              <rect x={0} y={0} width={w} height={h} rx={6} fill="#fff" stroke="#333" strokeWidth={1} opacity={0.96} />
-              {/* Arrow pointing to the train */}
+            <g transform={`translate(${boxX},${boxY})`} onClick={(event) => event.stopPropagation()} aria-live="polite">
+              <rect
+                x={0}
+                y={0}
+                width={width}
+                height={height}
+                rx={10}
+                fill="var(--tooltip-bg)"
+                stroke="var(--tooltip-border)"
+                strokeWidth={1}
+              />
               {sideRight ? (
-                // Arrow pointing toward the train on the left: tip at (-6, h/2)
-                <path d={`M0 ${h/2 - 4} L0 ${h/2 + 4} L-6 ${h/2} Z`} fill="#fff" stroke="#333" strokeWidth={1} />
+                <path
+                  d={`M0 ${height / 2 - 5} L0 ${height / 2 + 5} L-8 ${height / 2} Z`}
+                  fill="var(--tooltip-bg)"
+                  stroke="var(--tooltip-border)"
+                  strokeWidth={1}
+                />
               ) : (
-                // Arrow pointing toward the train on the right: tip at (w+6, h/2)
-                <path d={`M${w} ${h/2 - 4} L${w} ${h/2 + 4} L${w + 6} ${h/2} Z`} fill="#fff" stroke="#333" strokeWidth={1} />
+                <path
+                  d={`M${width} ${height / 2 - 5} L${width} ${height / 2 + 5} L${width + 8} ${height / 2} Z`}
+                  fill="var(--tooltip-bg)"
+                  stroke="var(--tooltip-border)"
+                  strokeWidth={1}
+                />
               )}
-              <text x={padX} y={padY + fsTitle} fontSize={fsTitle} fill="#111">Next: {nextName}</text>
-              <text x={padX} y={padY + lineHeight1 + fsSub - 1} fontSize={fsSub} fill="#555">ETA: {etaStr}</text>
+              <text x={padX} y={padY + fontTitle} fontSize={fontTitle} fill="var(--tooltip-fg)">
+                {title}
+              </text>
+              <text
+                x={padX}
+                y={padY + fontTitle + gap + fontSubtitle - 1}
+                fontSize={fontSubtitle}
+                fill="var(--tooltip-muted)"
+              >
+                {subtitle}
+              </text>
             </g>
           );
         })()}
       </svg>
-      <style>{`.station .label{opacity:0;transition:opacity .12s ease-in-out;pointer-events:none}.station:hover .label{opacity:1}`}</style>
+      <style>{`
+        .station .label{opacity:0;transition:opacity .12s ease-out;pointer-events:none}
+        @media (hover:hover){.station:hover .label{opacity:1}}
+        @media (min-width:768px){.station .label{opacity:1}}
+        .train-marker:focus,.train-marker:focus-visible{outline:none}
+        #train-layer .focus-target{transition:stroke .12s ease-in-out}
+        #train-layer g:focus-visible .focus-target{stroke:var(--focus-ring)}
+      `}</style>
     </div>
   );
 }
+
+
+
+
+
+
+
+
+

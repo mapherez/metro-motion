@@ -1,12 +1,57 @@
+@import "tailwindcss";
+@config "../tailwind.config.js";
+
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
+  --bg: #f8f9fb;
+  --bg-soft: #ffffff;
+  --fg: #111216;
+  --fg-dim: #555866;
+  --focus-ring: rgba(17, 83, 198, 0.55);
+  --link: #264fb3;
+  --alert: #b6312c;
+  --tooltip-bg: rgba(255, 255, 255, 0.96);
+  --tooltip-border: rgba(17, 19, 24, 0.12);
+  --tooltip-fg: #10131a;
+  --tooltip-muted: rgba(48, 52, 64, 0.72);
+
+  --line-azul: #467ded;
+  --line-amarela: #ffb83b;
+  --line-verde: #07ac56;
+  --line-vermelha: #e7343f;
 }
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0b0b0c;
+  --bg-soft: #131316;
+  --fg: #e8e8ea;
+  --fg-dim: #a2a2a8;
+  --focus-ring: rgba(70, 125, 237, 0.7);
+  --link: #9cbcff;
+  --alert: #ffb86c;
+  --tooltip-bg: rgba(20, 22, 28, 0.95);
+  --tooltip-border: rgba(255, 255, 255, 0.12);
+  --tooltip-fg: #f6f7fb;
+  --tooltip-muted: rgba(230, 234, 244, 0.75);
+}
+
+@layer utilities {
+  .text-muted {
+    color: var(--fg-dim);
+  }
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
 body {
   margin: 0;
-  line-height: 1.4;
-}
-h1 {
-  font-size: 1.25rem;
-  margin: 0 0 0.5rem;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
 }
 
