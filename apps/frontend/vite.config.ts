@@ -1,24 +1,22 @@
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
 
-// Configure a proxy for backend during dev.
-const backend = process.env.VITE_API_BASE || 'http://localhost:8080';
+const backend = process.env.VITE_API_BASE || "http://localhost:8080";
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
   server: {
-    // Bind to all local interfaces (IPv4/IPv6) and fail if 5174 is taken.
-    host: '127.0.0.1',
+    host: "127.0.0.1",
     strictPort: true,
     port: 5174,
     proxy: {
-      // Example usage: fetch('/api/now') -> proxied to backend
-      '/api': {
+      "/api": {
         target: backend,
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\//, '/'),
-        headers: { 'X-Dev-Proxy': 'vite' }
-      }
-    }
-  }
+        rewrite: (path) => path.replace(/^\/api\//, "/"),
+        headers: { "X-Dev-Proxy": "vite" },
+      },
+    },
+  },
 });
