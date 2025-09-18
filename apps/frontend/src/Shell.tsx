@@ -72,12 +72,8 @@ export function Shell() {
     const baseHeight = `calc(100dvh - ${safeHeader}px - ${safeFooter}px - ${safeTab}px)`;
     const style: CSSProperties = {
       minHeight: baseHeight,
-      paddingBottom: `${safeTab}px`,
-      WebkitOverflowScrolling: "touch",
+      paddingBottom: `${safeTab}px`
     };
-    if (safeTab <= 0) {
-      style.height = baseHeight;
-    }
     return style;
   }, [headerHeight, footerHeight, tabBarHeight]);
 
@@ -146,7 +142,7 @@ export function Shell() {
         </div>
       </header>
 
-      <main className="relative flex-1 min-h-0 overflow-y-auto md:overflow-visible" style={mainStyle}>
+      <main className="relative flex-1 min-h-0" style={mainStyle}>
         <Outlet />
       </main>
 

@@ -13,17 +13,14 @@ const focusRing =
   "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]";
 
 const desktopMapStyle: CSSProperties = {
-  height: "calc(100dvh - var(--shell-header-height, 0px) - var(--shell-footer-height, 0px))",
   minHeight: "calc(100dvh - var(--shell-header-height, 0px) - var(--shell-footer-height, 0px))",
-  overflow: "hidden",
-  flexDirection: "column",
 };
 
 export function Home() {
   return (
     <div className="flex h-full flex-col">
-      <div className="hidden md:flex-1 md:block" style={desktopMapStyle}>
-        <div className="flex h-full flex-1">
+      <div className="hidden md:flex md:flex-1" style={desktopMapStyle}>
+        <div className="flex min-h-0 flex-1">
           <MetroMap />
         </div>
       </div>
