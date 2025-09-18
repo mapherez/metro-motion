@@ -8,10 +8,22 @@
   },
   "scripts": {
     "dev": "turbo run dev --parallel",
+
+    "dev:front": "turbo run dev --filter=@metro/frontend",
+    "dev:back": "turbo run dev --filter=@metro/backend",
+
     "build": "turbo run build",
+    "build:front": "turbo run build --filter=@metro/frontend",
+    "build:back": "turbo run build --filter=@metro/backend",
+
     "lint": "turbo run lint",
     "clean": "turbo run clean",
-    "extract:stations": "node tools/extract-stations.mjs"
+    "extract:stations": "node tools/extract-stations.mjs",
+
+    "purge:nm": "pnpm dlx rimraf --glob \"**/node_modules\" node_modules",
+    "purge:cache": "pnpm dlx rimraf --glob \"**/.turbo\" \"**/.vite\" \"**/.cache\" \"**/tsconfig.tsbuildinfo\"",
+    "purge:dist": "pnpm dlx rimraf --glob \"**/dist\" dist",
+    "purge:types": "pnpm dlx rimraf --glob \"**/tsconfig.tsbuildinfo\" \"**/*.tsbuildinfo\""
   },
   "devDependencies": {
     "autoprefixer": "^10.4.21",

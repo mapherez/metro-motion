@@ -118,6 +118,9 @@ importers:
       vite:
         specifier: ^5.3.1
         version: 5.4.20
+      vite-plugin-qrcode:
+        specifier: ^0.3.0
+        version: 0.3.0(vite@5.4.20)
 
   packages/shared-types:
     dependencies:
@@ -2035,6 +2038,11 @@ packages:
     resolution: {integrity: sha512-a39t9ApHNx2L4+HBnQKqxxHNs1r7KF+Intd8Q/g1bUh6q0WIp9voPXJ/x0j+ZL45KF1pJd9+q2jLIRMfvEshkA==}
     dev: false
 
+  /qrcode-terminal@0.12.0:
+    resolution: {integrity: sha512-EXtzRZmC+YGmGlDFbXKxQiMZNwCLEO6BANKXG4iCtSIM0yqc/pappSx3RIKr4r0uh5JsBckOXeKrB3Iz7mdQpQ==}
+    hasBin: true
+    dev: true
+
   /quick-format-unescaped@4.0.4:
     resolution: {integrity: sha512-tYC1Q1hgyRuHgloV/YXs2w15unPVh8qfu/qCTfhTYamaw7fyhumKa2yGpdSo87vY32rIclj+4fWYQXUMs9EHvg==}
     dev: false
@@ -2410,6 +2418,16 @@ packages:
     dependencies:
       react: 18.3.1
     dev: false
+
+  /vite-plugin-qrcode@0.3.0(vite@5.4.20):
+    resolution: {integrity: sha512-tCsN3ckHmFs9vRyFwdNdmlMzzt8iX7hZQrMMOhIIpu8SchfHgA78TIGBfeRnXARBo71qBPC7+O2rgMqPsOdCzg==}
+    engines: {node: ^14.13.1 || ^16.0.0 || >=18}
+    peerDependencies:
+      vite: ^3.0.0 || ^4.0.0 || ^5.0.0 || ^6.0.0 || ^7.0.0
+    dependencies:
+      qrcode-terminal: 0.12.0
+      vite: 5.4.20
+    dev: true
 
   /vite@5.4.20:
     resolution: {integrity: sha512-j3lYzGC3P+B5Yfy/pfKNgVEg4+UtcIJcVRt2cDjIOmhLourAqPqf8P7acgxeiSgUB7E3p2P8/3gNIgDLpwzs4g==}
