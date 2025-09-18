@@ -16,7 +16,8 @@ export const Line = z.object({
 
 export const Snapshot = z.object({
   t: z.number(), // epoch secs
-  lines: z.record(Line)
+  lines: z.record(Line),
+  serviceOpen: z.boolean().optional()
 });
 
 export type Snapshot = z.infer<typeof Snapshot>;

@@ -77,10 +77,15 @@ export function Shell() {
     return style;
   }, [headerHeight, footerHeight, tabBarHeight]);
 
-  const lastUpdated = snapshot ? new Date(snapshot.t * 1000).toLocaleTimeString() : "--";
+  const isClosed = snapshot?.serviceOpen === false;
   const statusBits: string[] = [];
-  statusBits.push(lastUpdated);
-  if (sinceText) statusBits.push(`(${sinceText})`);
+  if (isClosed) {
+    statusBits.push("Metro fechado (servico 06:30-01:00)");
+  } else {
+    const lastUpdated = snapshot ? new Date(snapshot.t * 1000).toLocaleTimeString() : "--";
+    statusBits.push(lastUpdated);
+    if (sinceText) statusBits.push(`(${sinceText})`);
+  }
   if (loading) statusBits.push("loading...");
   const statusText = statusBits.join(" ");
 

@@ -105,7 +105,7 @@ export function App() {
   }, [API_BASE, setSnapshot]);
 
   useEffect(() => {
-    if (!snapshot) {
+    if (!snapshot || snapshot.serviceOpen === false) {
       setSinceText("");
       return;
     }

@@ -10,6 +10,40 @@ import type { Snapshot } from '@metro/shared-types';
 
 const METRO_ENDPOINT = 'tempoEspera/Estacao/todos';
 
+const LISBON_TIMEZONE = 'Europe/Lisbon';
+const SERVICE_OPEN_MINUTES = 6 * 60 + 30; // 06:30
+const SERVICE_CLOSE_MINUTES = 1 * 60; // 01:00 cutoff
+const LISBON_CLOCK_FORMATTER = new Intl.DateTimeFormat('en-GB', {
+  timeZone: LISBON_TIMEZONE,
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hour12: false
+});
+
+type ServiceStatus = { open: true } | { open: false; msUntilOpen: number };
+
+function getLisbonClock(date = new Date()) {
+  const formatted = LISBON_CLOCK_FORMATTER.format(date);
+  const [hourStr = '0', minuteStr = '0', secondStr = '0'] = formatted.split(':');
+  const hour = Number(hourStr);
+  const minute = Number(minuteStr);
+  const second = Number(secondStr);
+  return { hour, minute, second };
+}
+
+function computeServiceStatus(date = new Date()): ServiceStatus {
+  const { hour, minute, second } = getLisbonClock(date);
+  const minutes = hour * 60 + minute;
+  if (minutes >= SERVICE_OPEN_MINUTES || minutes < SERVICE_CLOSE_MINUTES) {
+    return { open: true };
+  }
+  const secondsNow = minutes * 60 + second;
+  const secondsOpen = SERVICE_OPEN_MINUTES * 60;
+  const diffMs = Math.max(0, (secondsOpen - secondsNow) * 1000);
+  return { open: false, msUntilOpen: diffMs };
+}
+
 export class Ingestor {
   private timer?: NodeJS.Timeout;
   private backoffMs = 0;
@@ -17,63 +51,13 @@ export class Ingestor {
   private prevState = new Map<string, { to: string; segmentStartEta: number; t: number }>();
   private lastSnapshot?: Snapshot;
   private lastPublishAt = 0;
+  private serviceOpen = true;
 
   async start() {
     try {
       if (config.metroApi.caFile) {
         console.log(`[ingestor] ignoring METRO_CA_FILE, use NODE_EXTRA_CA_CERTS instead`);
       }
-      // if (config.metroApi.caFile) {
-      //   // Prefer a programmatic TLS CA injection via Undici to avoid
-      //   // NODE_EXTRA_CA_CERTS being read only at process start.
-      //   try {
-      //     const __filename = fileURLToPath(import.meta.url);
-      //     const __dirnameLocal = path.dirname(__filename);
-      //     const repoRoot = path.resolve(__dirnameLocal, '../../..');
-
-      //     const caPathRaw = config.metroApi.caFile;
-      //     const candidates = new Set<string>();
-      //     // As-is (absolute or relative to CWD)
-      //     candidates.add(path.isAbsolute(caPathRaw) ? caPathRaw : path.resolve(process.cwd(), caPathRaw));
-      //     // Relative to backend package root (apps/backend)
-      //     candidates.add(path.resolve(__dirnameLocal, '..', caPathRaw));
-      //     // Relative to repo root + apps/backend
-      //     candidates.add(path.resolve(repoRoot, 'apps/backend', caPathRaw));
-
-      //     let caPem: string | undefined;
-      //     for (const p of candidates) {
-      //       try {
-      //         const buf = await readFile(p, 'utf8');
-      //         if (buf.includes('BEGIN CERTIFICATE')) {
-      //           caPem = buf;
-      //           // eslint-disable-next-line no-console
-      //           console.log(`[ingestor] Using CA bundle at: ${p}`);
-      //           break;
-      //         }
-      //       } catch {}
-      //     }
-
-      //     if (caPem) {
-      //       // Lazy import to avoid adding a hard dependency for environments without fetch
-      //       const undici = await import('undici');
-      //       // Use a custom connector so we can supply TLS CA programmatically
-      //       const buildConnector: any = (undici as any).buildConnector;
-      //       const AgentCtor: any = (undici as any).Agent;
-      //       const setGlobalDispatcher: any = (undici as any).setGlobalDispatcher;
-      //       const connector = buildConnector({ tls: { ca: caPem } });
-      //       const agent = new AgentCtor({ connect: connector });
-      //       setGlobalDispatcher(agent);
-      //     } else {
-      //       // Fallback to env var for environments where that still works
-      //       process.env.NODE_EXTRA_CA_CERTS = config.metroApi.caFile;
-      //       // eslint-disable-next-line no-console
-      //       console.warn('[ingestor] CA file not found via candidates; falling back to NODE_EXTRA_CA_CERTS.');
-      //     }
-      //   } catch (e) {
-      //     // eslint-disable-next-line no-console
-      //     console.warn('[ingestor] Failed to configure custom CA bundle:', e);
-      //   }
-      // }
       if ('connect' in this.redis && typeof (this.redis as any).connect === 'function') {
         await (this.redis as any).connect();
       }
@@ -89,6 +73,27 @@ export class Ingestor {
 
   private schedule(nextMs: number) {
     this.timer = setTimeout(() => this.tick(), nextMs);
+  }
+
+  private async publishSnapshot(snapshot: Snapshot, label = 'snapshot stored and published') {
+    if (!config.redis.url) {
+      return;
+    }
+    const payload = JSON.stringify(snapshot);
+    await (this.redis as any).set(
+      config.redis.snapshotKey,
+      payload,
+      'EX',
+      config.redis.ttlSeconds
+    );
+    await (this.redis as any).publish(config.redis.channel, payload);
+    // eslint-disable-next-line no-console
+    console.log(`[ingestor] ${label} -> ${config.redis.channel}`);
+    this.lastPublishAt = Date.now();
+  }
+
+  private buildClosedSnapshot(): Snapshot {
+    return toSnapshot([], { serviceOpen: false });
   }
 
   private async fetchTempoEspera(): Promise<TempoEsperaResponse | null> {
@@ -157,17 +162,41 @@ export class Ingestor {
 
   private async tick() {
     const interval = config.pollIntervalMs;
+    const serviceStatus = computeServiceStatus();
+    if (!serviceStatus.open) {
+      if (this.serviceOpen) {
+        try {
+          const closedSnapshot = this.buildClosedSnapshot();
+          await this.publishSnapshot(closedSnapshot, 'service closed snapshot broadcast');
+          this.lastSnapshot = closedSnapshot;
+        } catch (err) {
+          // eslint-disable-next-line no-console
+          console.error('[ingestor] failed to publish closed snapshot:', err);
+        }
+        // eslint-disable-next-line no-console
+        console.log('[ingestor] service closed (01:00-06:30), skipping upstream fetch');
+      }
+      this.serviceOpen = false;
+      this.backoffMs = 0;
+      const jitter = Math.floor(Math.random() * 200) - 100;
+      const wait = Math.max(200, serviceStatus.msUntilOpen + jitter);
+      this.schedule(wait);
+      return;
+    }
+
+    this.serviceOpen = true;
+
     try {
       const data = await this.fetchTempoEspera();
       if (data) {
-        let snapshot: any;
+        let snapshot: Snapshot;
         // Accept either the raw Metro model or a pre-normalized Snapshot model
         if (typeof (data as any).t === 'number' && typeof (data as any).lines === 'object') {
           const parsed = SnapshotSchema.safeParse(data);
           if (!parsed.success) {
             throw new Error('Upstream provided invalid Snapshot shape');
           }
-          snapshot = parsed.data;
+          snapshot = { ...parsed.data, serviceOpen: true };
         } else {
           const trains = normalizeTempoEspera(data, this.prevState, config.dwellSeconds);
           snapshot = toSnapshot(trains);
@@ -179,20 +208,8 @@ export class Ingestor {
         );
         // eslint-disable-next-line no-console
         console.log(`[ingestor] trains=${trainsCount} t=${snapshot.t}`);
-        // Write to Redis (if configured)
-        if (config.redis.url) {
-          await (this.redis as any).set(
-            config.redis.snapshotKey,
-            JSON.stringify(snapshot),
-            'EX',
-            config.redis.ttlSeconds
-          );
-          await (this.redis as any).publish(config.redis.channel, JSON.stringify(snapshot));
-          // eslint-disable-next-line no-console
-          console.log(`[ingestor] snapshot stored and published -> ${config.redis.channel}`);
-        }
+        await this.publishSnapshot(snapshot);
         this.lastSnapshot = snapshot;
-        this.lastPublishAt = Date.now();
         this.backoffMs = 0;
       }
     } catch (err: any) {
@@ -206,20 +223,12 @@ export class Ingestor {
       // Re-emit last snapshot so clients can infer staleness by snapshot.t
       if (this.lastSnapshot && config.redis.url) {
         try {
-          await (this.redis as any).set(
-            config.redis.snapshotKey,
-            JSON.stringify(this.lastSnapshot),
-            'EX',
-            config.redis.ttlSeconds
-          );
-          await (this.redis as any).publish(config.redis.channel, JSON.stringify(this.lastSnapshot));
-          this.lastPublishAt = Date.now();
-          // eslint-disable-next-line no-console
-          console.log('[ingestor] re-published last snapshot (stale)');
+          const stale = { ...this.lastSnapshot, serviceOpen: true };
+          await this.publishSnapshot(stale, 're-published last snapshot (stale)');
         } catch {}
       }
     } finally {
-      const jitter = Math.floor(Math.random() * 200) - 100; // ±100ms
+      const jitter = Math.floor(Math.random() * 200) - 100; // +/-100ms
       this.schedule(Math.max(200, interval + this.backoffMs + jitter));
     }
   }
