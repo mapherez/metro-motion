@@ -8,6 +8,7 @@ export type ShellContextValue = {
   setTheme: (mode: ThemeMode) => void;
   toggleTheme: () => void;
   snapshot: Snapshot | null;
+  serviceOpen: boolean | null;
   sinceText: string;
   loading: boolean;
   error: string | null;

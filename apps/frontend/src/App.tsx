@@ -36,6 +36,7 @@ export function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sinceText, setSinceText] = useState("");
+  const [serviceOpen, setServiceOpen] = useState<boolean | null>(null);
   const [theme, setTheme] = useState<ThemeMode>(() => {
     const initial = resolveInitialTheme();
     applyTheme(initial);
@@ -63,6 +64,7 @@ export function App() {
         if (!active) return;
         if (res.status === 204) {
           setSnapshot(null);
+          setServiceOpen(null);
           return;
         }
         if (!res.ok) {
@@ -70,9 +72,11 @@ export function App() {
         }
         const json = await res.json();
         setSnapshot(json);
+        setServiceOpen(json?.serviceOpen === false ? false : true);
       } catch (err: any) {
         if (!active) return;
         setError(err?.message ?? "Failed to load snapshot");
+        setServiceOpen(null);
       } finally {
         if (active) {
           setLoading(false);
@@ -83,7 +87,7 @@ export function App() {
     return () => {
       active = false;
     };
-  }, [API_BASE, setSnapshot]);
+  }, [API_BASE, setSnapshot, setServiceOpen]);
 
   useEffect(() => {
     const es = new EventSource(`${API_BASE}/stream`);
@@ -91,6 +95,7 @@ export function App() {
       try {
         const json = JSON.parse(event.data);
         setSnapshot(json);
+        setServiceOpen(json?.serviceOpen === false ? false : true);
         setError(null);
       } catch (err) {
         console.error("Failed to parse SSE payload", err);
@@ -102,10 +107,10 @@ export function App() {
     return () => {
       es.close();
     };
-  }, [API_BASE, setSnapshot]);
+  }, [API_BASE, setSnapshot, setServiceOpen]);
 
   useEffect(() => {
-    if (!snapshot || snapshot.serviceOpen === false) {
+    if (!snapshot || serviceOpen === false) {
       setSinceText("");
       return;
     }
@@ -119,7 +124,7 @@ export function App() {
     return () => {
       window.clearInterval(id);
     };
-  }, [snapshot]);
+  }, [snapshot, serviceOpen]);
 
   const contextValue = useMemo(
     () => ({
@@ -127,11 +132,12 @@ export function App() {
       setTheme,
       toggleTheme,
       snapshot,
+      serviceOpen,
       sinceText,
       loading,
       error,
     }),
-    [theme, snapshot, sinceText, loading, error, toggleTheme]
+    [theme, snapshot, serviceOpen, sinceText, loading, error, toggleTheme]
   );
 
   return (

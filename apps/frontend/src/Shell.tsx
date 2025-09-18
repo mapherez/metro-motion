@@ -5,7 +5,7 @@ import { useShellContext } from "./shell-context";
 const SHELL_HEIGHT_FALLBACK = "68px"; // rough fallback in case measurement fails
 
 export function Shell() {
-  const { theme, toggleTheme, snapshot, sinceText, loading, error } = useShellContext();
+  const { theme, toggleTheme, snapshot, serviceOpen, sinceText, loading, error } = useShellContext();
   const headerRef = useRef<HTMLElement | null>(null);
   const footerRef = useRef<HTMLElement | null>(null);
   const tabBarRef = useRef<HTMLElement | null>(null);
@@ -77,7 +77,7 @@ export function Shell() {
     return style;
   }, [headerHeight, footerHeight, tabBarHeight]);
 
-  const isClosed = snapshot?.serviceOpen === false;
+  const isClosed = serviceOpen === false;
   const statusBits: string[] = [];
   if (isClosed) {
     statusBits.push("Metro fechado (servico 06:30-01:00)");
