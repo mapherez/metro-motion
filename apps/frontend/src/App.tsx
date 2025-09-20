@@ -1,58 +1,24 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
+
 import { useSnapshotStore } from "./state";
 import { Shell } from "./Shell";
 import { Home } from "./views/Home";
 import { About } from "./views/About";
 import { LineView } from "./views/LineView";
-import { ShellContext, ThemeMode } from "./shell-context";
-
-const THEME_STORAGE_KEY = "metro-theme";
-
-function resolveInitialTheme(): ThemeMode {
-  if (typeof window === "undefined") {
-    return "light";
-  }
-  const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
-  if (stored === "light" || stored === "dark") {
-    return stored;
-  }
-  const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-  return prefersDark ? "dark" : "light";
-}
-
-function applyTheme(mode: ThemeMode) {
-  if (typeof document === "undefined") return;
-  const root = document.documentElement;
-  root.dataset.theme = mode;
-  root.style.colorScheme = mode;
-}
+import { ShellContext } from "./shell-context";
+import { useTheme } from "./app/providers";
 
 export function App() {
   const API_BASE = import.meta.env.DEV ? "/api" : import.meta.env.VITE_API_BASE;
   const snapshot = useSnapshotStore((s) => s.snapshot);
   const setSnapshot = useSnapshotStore((s) => s.setSnapshot);
+  const { theme, setTheme, toggleTheme } = useTheme();
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sinceText, setSinceText] = useState("");
   const [serviceOpen, setServiceOpen] = useState<boolean | null>(null);
-  const [theme, setTheme] = useState<ThemeMode>(() => {
-    const initial = resolveInitialTheme();
-    applyTheme(initial);
-    return initial;
-  });
-
-  const toggleTheme = useCallback(() => {
-    setTheme((prev) => (prev === "dark" ? "light" : "dark"));
-  }, []);
-
-  useEffect(() => {
-    applyTheme(theme);
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(THEME_STORAGE_KEY, theme);
-    }
-  }, [theme]);
 
   useEffect(() => {
     let active = true;
@@ -61,7 +27,7 @@ export function App() {
       setError(null);
       try {
         const res = await fetch(`${API_BASE}/now`);
-        if (!active) return;
+        if (!active) {return;}
         if (res.status === 204) {
           setSnapshot(null);
           setServiceOpen(null);
@@ -73,9 +39,10 @@ export function App() {
         const json = await res.json();
         setSnapshot(json);
         setServiceOpen(json?.serviceOpen === false ? false : true);
-      } catch (err: any) {
-        if (!active) return;
-        setError(err?.message ?? "Failed to load snapshot");
+      } catch (err: unknown) {
+        if (!active) {return;}
+        const message = err instanceof Error ? err.message : "Failed to load snapshot";
+        setError(message);
         setServiceOpen(null);
       } finally {
         if (active) {
@@ -87,7 +54,7 @@ export function App() {
     return () => {
       active = false;
     };
-  }, [API_BASE, setSnapshot, setServiceOpen]);
+  }, [API_BASE, setSnapshot]);
 
   useEffect(() => {
     const es = new EventSource(`${API_BASE}/stream`);
@@ -107,7 +74,7 @@ export function App() {
     return () => {
       es.close();
     };
-  }, [API_BASE, setSnapshot, setServiceOpen]);
+  }, [API_BASE, setSnapshot]);
 
   useEffect(() => {
     if (!snapshot || serviceOpen === false) {
@@ -137,7 +104,7 @@ export function App() {
       loading,
       error,
     }),
-    [theme, snapshot, serviceOpen, sinceText, loading, error, toggleTheme]
+    [theme, setTheme, toggleTheme, snapshot, serviceOpen, sinceText, loading, error]
   );
 
   return (

@@ -103,9 +103,9 @@ export function neighborForDirection(
 ): { next?: string; prev?: string } {
   const order = lineOrder[line];
   const i = order.indexOf(fromStop);
-  if (i < 0) return {};
+  if (i < 0) {return {};}
   const ti = order.indexOf(towardsTerminal);
-  if (ti < 0) return { next: order[i + 1], prev: order[i - 1] };
+  if (ti < 0) {return { next: order[i + 1], prev: order[i - 1] };}
   if (ti > i) {
     // moving forward in array
     return { next: order[i + 1], prev: order[i - 1] };

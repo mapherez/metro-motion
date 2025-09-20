@@ -1,9 +1,11 @@
 import { useMemo } from "react";
 import { Link, useParams } from "react-router-dom";
 import { lineNames, lineOrder } from "@metro/station-data";
-import type { LineName } from "@metro/station-data";
 import { stationById } from "@metro/station-data/stations";
+
 import { useSnapshotStore } from "../state";
+
+import type { LineName } from "@metro/station-data";
 
 const LABEL_BY_LINE: Record<LineName, string> = {
   azul: "Azul",
@@ -16,10 +18,14 @@ const focusRing =
   "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]";
 
 function normalizeLineName(id: string | undefined): LineName {
-  if (!id) return "azul";
+  if (!id) {
+    return "azul";
+  }
   const normalized = id.toLowerCase();
   const allowed = lineNames as LineName[];
-  return allowed.includes(normalized as LineName) ? (normalized as LineName) : "azul";
+  return allowed.includes(normalized as LineName)
+    ? (normalized as LineName)
+    : "azul";
 }
 
 export function LineView() {
@@ -36,8 +42,12 @@ export function LineView() {
           best = Math.min(best, train.etaNext ?? Infinity);
         }
       }
-      if (!isFinite(best)) return "--";
-      if (best <= 0) return "Chegada";
+      if (!isFinite(best)) {
+        return "--";
+      }
+      if (best <= 0) {
+        return "Chegada";
+      }
       const minutes = Math.floor(best / 60);
       const seconds = Math.floor(best % 60);
       return minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;

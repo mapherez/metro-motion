@@ -1,4 +1,4 @@
-import { z } from "zod";
+﻿import { z } from "zod";
 
 export const Train = z.object({
   id: z.string(), // ex.: "4C"
@@ -23,3 +23,7 @@ export const Snapshot = z.object({
 export type Snapshot = z.infer<typeof Snapshot>;
 export type Train = z.infer<typeof Train>;
 export type Line = z.infer<typeof Line>;
+
+export const TrainSchema = Train;
+export const LineSchema = Line;
+export const SnapshotSchema = Snapshot;

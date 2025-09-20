@@ -1,0 +1,7 @@
+{
+  "routes": {
+    "feedback": "https://metro.example.com/feedback",
+    "status": "https://status.metro.example.com"
+  }
+}
+

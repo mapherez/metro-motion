@@ -1,0 +1,7 @@
+{
+  "$schema": "../../config/schemas/locale.schema.json",
+  "nav.home": "Home",
+  "nav.lines": "Lines",
+  "nav.status": "Status"
+}
+

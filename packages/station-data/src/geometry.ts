@@ -1,4 +1,4 @@
-import type { LineName } from './index';
+import type { LineName } from './index.js';
 
 export const viewBox = { width: 800, height: 600 };
 

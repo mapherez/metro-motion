@@ -1,29 +1,37 @@
 {
-  "name": "@metro/shared-utils",
-  "version": "0.1.0",
-  "private": true,
-  "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "default": "./dist/index.js"
+    "name": "@metro/shared-utils",
+    "version": "0.1.0",
+    "private": true,
+    "type": "module",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.js",
+            "default": "./dist/index.js"
+        }
+    },
+    "files": [
+        "dist"
+    ],
+    "scripts": {
+        "build": "tsc -p tsconfig.json",
+        "dev": "tsc -w -p tsconfig.json",
+        "clean": "rimraf dist",
+        "lint": "eslint src --ext .ts,.tsx",
+        "lint:fix": "eslint src --ext .ts,.tsx --fix --cache",
+        "typecheck": "tsc -p tsconfig.json --noEmit",
+        "typecheck:watch": "tsc -p tsconfig.json --noEmit -w",
+        "test": "vitest run --passWithNoTests"
+    },
+    "devDependencies": {
+        "rimraf": "^6.0.1",
+        "typescript": "^5.4.0"
+    },
+    "dependencies": {
+        "@metro/shared-types": "workspace:*",
+        "@metro/station-data": "workspace:*",
+        "intl-messageformat": "^10.5.5"
     }
-  },
-  "files": ["dist"],
-  "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "dev": "tsc -w -p tsconfig.json",
-    "clean": "rimraf dist"
-  },
-  "devDependencies": {
-    "typescript": "^5.4.0",
-    "rimraf": "^6.0.1"
-  },
-  "dependencies": {
-    "@metro/shared-types": "workspace:*",
-    "@metro/station-data": "workspace:*"
-  }
 }

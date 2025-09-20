@@ -1,6 +1,11 @@
-import type { Snapshot as SnapshotT, Train as TrainT } from "@metro/shared-types";
-import { destinos, neighborForDirection, lineNames } from "@metro/station-data";
+export * from "./config/settings";
+export * from "./config/themes";
+export * from "./config/locales";
+
+import { destinos, lineNames } from "@metro/station-data";
 import { lineOrder } from "@metro/station-data";
+
+import type { Snapshot as SnapshotT, Train as TrainT } from "@metro/shared-types";
 
 type TempoEsperaItem = {
   stop_id: string;
@@ -41,7 +46,7 @@ export function normalizeTempoEspera(
   dwellSeconds: number
 ): InferredTrain[] {
   const rows: any = (data as any)?.resposta;
-  if (!Array.isArray(rows)) return [];
+  if (!Array.isArray(rows)) {return [];}
 
   type Obs = { stop: string; eta: number; destId?: string };
   const perTrain: Map<string, Obs[]> = new Map();
@@ -53,9 +58,9 @@ export function normalizeTempoEspera(
       [it.comboio3, it.tempoChegada3]
     ];
     for (const [trainId, etaStr] of triplets) {
-      if (!trainId || !etaStr) continue;
+      if (!trainId || !etaStr) {continue;}
       const eta = parseInt(etaStr, 10);
-      if (!Number.isFinite(eta)) continue;
+      if (!Number.isFinite(eta)) {continue;}
       const arr = perTrain.get(trainId) || [];
       arr.push({ stop: it.stop_id, eta, destId: it.destino });
       perTrain.set(trainId, arr);
@@ -82,28 +87,28 @@ export function normalizeTempoEspera(
     const idxTo = order.indexOf(to);
     const idxTerm = order.indexOf(terminal);
     let dirSign = 0;
-    if (idxTo >= 0 && idxTerm >= 0) dirSign = Math.sign(idxTerm - idxTo);
+    if (idxTo >= 0 && idxTerm >= 0) {dirSign = Math.sign(idxTerm - idxTo);}
     if (dirSign === 0 && min2) {
       const idx2 = order.indexOf(min2.stop);
-      if (idx2 >= 0 && idxTo >= 0) dirSign = Math.sign(idx2 - idxTo);
+      if (idx2 >= 0 && idxTo >= 0) {dirSign = Math.sign(idx2 - idxTo);}
     }
-    if (dirSign === 0) dirSign = 1;
+    if (dirSign === 0) {dirSign = 1;}
 
     let fromIdx = idxTo - dirSign;
     if (fromIdx < 0 || fromIdx >= order.length) {
       fromIdx = idxTo + dirSign;
-      if (fromIdx < 0 || fromIdx >= order.length) fromIdx = idxTo;
+      if (fromIdx < 0 || fromIdx >= order.length) {fromIdx = idxTo;}
     }
     const from = order[fromIdx] || to;
 
     const prevState = prev.get(trainId);
     let segmentStartEta = prevState && prevState.to === to ? prevState.segmentStartEta : etaNext + dwellSeconds;
-    if (!Number.isFinite(segmentStartEta) || segmentStartEta <= 0) segmentStartEta = Math.max(etaNext, 1);
+    if (!Number.isFinite(segmentStartEta) || segmentStartEta <= 0) {segmentStartEta = Math.max(etaNext, 1);}
 
     let progress01 = etaNext === 0 ? 1 : 1 - etaNext / segmentStartEta;
-    if (!Number.isFinite(progress01)) progress01 = 0;
-    if (progress01 < 0) progress01 = 0;
-    if (progress01 > 1) progress01 = 1;
+    if (!Number.isFinite(progress01)) {progress01 = 0;}
+    if (progress01 < 0) {progress01 = 0;}
+    if (progress01 > 1) {progress01 = 1;}
 
     result.push({ id: trainId, line, from, to, etaNext, progress01, dest: destName });
     prev.set(trainId, { to, segmentStartEta, t: now });

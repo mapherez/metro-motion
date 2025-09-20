@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+
 import type { Snapshot } from '@metro/shared-types';
 
 type Store = {

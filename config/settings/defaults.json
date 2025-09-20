@@ -1,0 +1,10 @@
+{
+  "$schema": "../schemas/settings.schema.json",
+  "defaultLocale": "en",
+  "supportedLocales": ["en", "pt"],
+  "theme": "light",
+  "featureFlags": {
+    "liveData": true
+  }
+}
+

@@ -1,11 +1,14 @@
-import { config } from './config.js';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createRedis } from './redis.js';
-import type { TempoEsperaResponse } from '@metro/shared-utils';
+
 import { normalizeTempoEspera, toSnapshot } from '@metro/shared-utils';
-import { Snapshot as SnapshotSchema } from '@metro/shared-types';
+import { SnapshotSchema } from '@metro/shared-types';
+
+import { createRedis } from './redis.js';
+import { config } from './config.js';
+
+import type { TempoEsperaResponse } from '@metro/shared-utils';
 import type { Snapshot } from '@metro/shared-types';
 
 const METRO_ENDPOINT = 'tempoEspera/Estacao/todos';
@@ -45,7 +48,7 @@ function computeServiceStatus(date = new Date()): ServiceStatus {
 }
 
 export class Ingestor {
-  private timer?: NodeJS.Timeout;
+  private timer?: ReturnType<typeof setTimeout>;
   private backoffMs = 0;
   private redis = createRedis();
   private prevState = new Map<string, { to: string; segmentStartEta: number; t: number }>();
@@ -61,14 +64,14 @@ export class Ingestor {
       if ('connect' in this.redis && typeof (this.redis as any).connect === 'function') {
         await (this.redis as any).connect();
       }
-    } catch (e) {
-      // continue; most likely a noop client
+    } catch (error) {
+      console.debug('[ingestor] redis connect skipped', error);
     }
     this.tick();
   }
 
   stop() {
-    if (this.timer) clearTimeout(this.timer);
+    if (this.timer) {clearTimeout(this.timer);}
   }
 
   private schedule(nextMs: number) {
@@ -87,7 +90,7 @@ export class Ingestor {
       config.redis.ttlSeconds
     );
     await (this.redis as any).publish(config.redis.channel, payload);
-    // eslint-disable-next-line no-console
+
     console.log(`[ingestor] ${label} -> ${config.redis.channel}`);
     this.lastPublishAt = Date.now();
   }
@@ -114,12 +117,12 @@ export class Ingestor {
         try {
           const raw = await readFile(p, 'utf8');
           const json = JSON.parse(raw) as TempoEsperaResponse;
-          // eslint-disable-next-line no-console
+
           console.log(`[ingestor] using mock data from ${p}`);
           return json;
-        } catch {}
+        } catch (error) { console.debug(`[ingestor] failed to load mock from ${p}`, error); }
       }
-      // eslint-disable-next-line no-console
+
       console.warn('[ingestor] METRO_MOCK=1 set but no mock file found.');
     }
     const controller = new AbortController();
@@ -134,14 +137,14 @@ export class Ingestor {
         headers['Authorization'] = `Bearer ${config.metroApi.key}`;
       }
       if (process.env.METRO_TLS_INSECURE === '1') {
-        // eslint-disable-next-line no-console
-        console.warn('[ingestor] METRO_TLS_INSECURE=1 – TLS cert verification is DISABLED (dev only)');
+
+        console.warn('[ingestor] METRO_TLS_INSECURE=1 - TLS cert verification is DISABLED (dev only)');
         // Disable TLS verification process-wide (dev only). Do NOT use in production.
         process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
       }
       const res = await fetch(url, { headers, signal: controller.signal });
       // Debug: basic request info
-      // eslint-disable-next-line no-console
+
       console.log(`[ingestor] GET ${url} -> ${res.status}`);
       if (!res.ok) {
         const err = new Error(`HTTP ${res.status}`) as any;
@@ -152,7 +155,7 @@ export class Ingestor {
       return json;
     } catch (e: any) {
       // Re-throw with cause info so outer handler logs details
-      // eslint-disable-next-line no-console
+
       console.error('[ingestor] fetch error cause:', e?.cause || e);
       throw e;
     } finally {
@@ -170,10 +173,10 @@ export class Ingestor {
           await this.publishSnapshot(closedSnapshot, 'service closed snapshot broadcast');
           this.lastSnapshot = closedSnapshot;
         } catch (err) {
-          // eslint-disable-next-line no-console
+
           console.error('[ingestor] failed to publish closed snapshot:', err);
         }
-        // eslint-disable-next-line no-console
+
         console.log('[ingestor] service closed (01:00-06:30), skipping upstream fetch');
       }
       this.serviceOpen = false;
@@ -206,7 +209,7 @@ export class Ingestor {
           (acc: number, line: any) => acc + ((line && line.trains && line.trains.length) || 0),
           0
         );
-        // eslint-disable-next-line no-console
+
         console.log(`[ingestor] trains=${trainsCount} t=${snapshot.t}`);
         await this.publishSnapshot(snapshot);
         this.lastSnapshot = snapshot;
@@ -217,7 +220,7 @@ export class Ingestor {
       const status = err?.status as number | undefined;
       const base = status === 429 || (status && status >= 500) ? 6000 : 4000;
       this.backoffMs = this.backoffMs ? Math.min(this.backoffMs * 2, 30000) : base;
-      // eslint-disable-next-line no-console
+
       console.error(`[ingestor] error: ${err?.message || err} (status=${status ?? 'n/a'}) backoff=${this.backoffMs}ms`);
 
       // Re-emit last snapshot so clients can infer staleness by snapshot.t
@@ -225,7 +228,7 @@ export class Ingestor {
         try {
           const stale = { ...this.lastSnapshot, serviceOpen: true };
           await this.publishSnapshot(stale, 're-published last snapshot (stale)');
-        } catch {}
+        } catch (error) { console.debug('[ingestor] failed to re-publish stale snapshot', error); }
       }
     } finally {
       const jitter = Math.floor(Math.random() * 200) - 100; // +/-100ms
@@ -233,3 +236,4 @@ export class Ingestor {
     }
   }
 }
+

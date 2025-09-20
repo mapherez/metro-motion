@@ -1,11 +1,11 @@
 import { createContext, useContext } from "react";
+
+import type { ThemeName } from "./app/providers";
 import type { Snapshot } from "@metro/shared-types";
 
-export type ThemeMode = "dark" | "light";
-
 export type ShellContextValue = {
-  theme: ThemeMode;
-  setTheme: (mode: ThemeMode) => void;
+  theme: ThemeName;
+  setTheme: (mode: ThemeName) => void;
   toggleTheme: () => void;
   snapshot: Snapshot | null;
   serviceOpen: boolean | null;

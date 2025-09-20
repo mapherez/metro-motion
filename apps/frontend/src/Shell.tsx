@@ -1,5 +1,6 @@
 import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 import { Link, NavLink, Outlet } from "react-router-dom";
+
 import { useShellContext } from "./shell-context";
 
 const SHELL_HEIGHT_FALLBACK = "68px"; // rough fallback in case measurement fails
@@ -84,9 +85,9 @@ export function Shell() {
   } else {
     const lastUpdated = snapshot ? new Date(snapshot.t * 1000).toLocaleTimeString() : "--";
     statusBits.push(lastUpdated);
-    if (sinceText) statusBits.push(`(${sinceText})`);
+    if (sinceText) {statusBits.push(`(${sinceText})`);}
   }
-  if (loading) statusBits.push("loading...");
+  if (loading) {statusBits.push("loading...");}
   const statusText = statusBits.join(" ");
 
   const commonFocus =

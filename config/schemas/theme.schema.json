@@ -1,0 +1,22 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Theme",
+  "type": "object",
+  "required": ["name", "semantic"],
+  "properties": {
+    "name": { "type": "string" },
+    "extends": { "type": "string" },
+    "foundations": { "type": "object" },
+    "semantic": {
+      "type": "object",
+      "properties": {
+        "color": { "type": "object" },
+        "radius": { "type": ["object", "string"] },
+        "shadow": { "type": ["object", "string"] },
+        "zIndex": { "type": "object" }
+      },
+      "required": ["color"]
+    }
+  }
+}
+

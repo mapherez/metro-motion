@@ -2,7 +2,7 @@ import 'dotenv/config';
 
 function intFromEnv(name: string, fallback: number): number {
   const v = process.env[name];
-  if (!v) return fallback;
+  if (!v) {return fallback;}
   const n = Number(v);
   return Number.isFinite(n) ? n : fallback;
 }

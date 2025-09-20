@@ -2,33 +2,65 @@
   "name": "metro-live",
   "private": true,
   "packageManager": "pnpm@8.15.5",
+  "type": "module",
   "engines": {
     "node": ">=20.0.0",
     "pnpm": ">=8.15.5"
   },
   "scripts": {
     "dev": "turbo run dev --parallel",
-
     "dev:front": "turbo run dev --filter=@metro/frontend",
     "dev:back": "turbo run dev --filter=@metro/backend",
-
     "build": "turbo run build",
     "build:front": "turbo run build --filter=@metro/frontend",
     "build:back": "turbo run build --filter=@metro/backend",
-
     "lint": "turbo run lint",
+    "lint:fix": "turbo run lint:fix",
+    "stylecheck": "turbo run stylecheck",
+    "stylefix": "turbo run stylefix",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
     "clean": "turbo run clean",
     "extract:stations": "node tools/extract-stations.mjs",
-
     "purge:nm": "pnpm dlx rimraf --glob \"**/node_modules\" node_modules",
     "purge:cache": "pnpm dlx rimraf --glob \"**/.turbo\" \"**/.vite\" \"**/.cache\" \"**/tsconfig.tsbuildinfo\"",
     "purge:dist": "pnpm dlx rimraf --glob \"**/dist\" dist",
-    "purge:types": "pnpm dlx rimraf --glob \"**/tsconfig.tsbuildinfo\" \"**/*.tsbuildinfo\""
+    "purge:types": "pnpm dlx rimraf --glob \"**/tsconfig.tsbuildinfo\" \"**/*.tsbuildinfo\"",
+    "validate:config": "tsx scripts/validate-config.ts"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.1.0",
+    "@testing-library/react": "^14.0.0",
+    "@testing-library/user-event": "^14.5.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "@vitest/coverage-v8": "^2.0.0",
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
     "autoprefixer": "^10.4.21",
+    "eslint": "^9.35.0",
+    "eslint-import-resolver-typescript": "^3.6.0",
+    "eslint-plugin-import": "^2.29.0",
+    "eslint-plugin-jsx-a11y": "^6.9.0",
+    "eslint-plugin-promise": "^6.1.1",
+    "eslint-plugin-unused-imports": "^4.0.0",
+    "globals": "^15.11.0",
+    "jsdom": "^24.0.0",
     "postcss": "^8.5.6",
+    "postcss-lit": "^1.1.0",
+    "postcss-scss": "^4.0.9",
+    "prettier": "^3.6.2",
+    "prettier-plugin-tailwindcss": "^0.6.14",
+    "stylelint": "^16.8.0",
+    "stylelint-config-clean-order": "^6.1.0",
+    "stylelint-config-standard": "^36.0.0",
+    "stylelint-config-standard-scss": "^13.0.0",
+    "stylelint-config-tailwindcss": "^0.0.7",
+    "stylelint-order": "^6.0.4",
+    "stylelint-scss": "^6.4.0",
     "tailwindcss": "^4.1.13",
-    "turbo": "^2.0.6"
+    "tsx": "^4.20.5",
+    "turbo": "^2.5.6",
+    "vitest": "^2.0.0"
   }
 }

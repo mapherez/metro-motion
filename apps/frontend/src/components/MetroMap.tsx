@@ -1,9 +1,17 @@
-import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type CSSProperties,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { lineOrder, lineNames } from "@metro/station-data";
-import type { LineName } from "@metro/station-data";
 import { stationById } from "@metro/station-data/stations";
 import { linePaths, viewBox } from "@metro/station-data/geometry";
+
 import { useSnapshotStore } from "../state";
+
+import type { LineName } from "@metro/station-data";
 
 type XY = { x: number; y: number };
 type PathMap = Partial<Record<LineName, SVGPathElement>>;
@@ -40,8 +48,8 @@ const clamp = (value: number, min: number, max: number) =>
   Math.max(min, Math.min(max, value));
 
 function formatEtaShort(raw: number | undefined | null): string {
-  if (raw == null || Number.isNaN(raw)) return "--";
-  if (raw <= 0) return "arriving";
+  if (raw == null || Number.isNaN(raw)) {return "--";}
+  if (raw <= 0) {return "arriving";}
   const minutes = Math.floor(raw / 60);
   const seconds = Math.floor(raw % 60);
   return minutes > 0
@@ -50,14 +58,14 @@ function formatEtaShort(raw: number | undefined | null): string {
 }
 
 function formatEtaAnnounce(raw: number | undefined | null): string {
-  if (raw == null || Number.isNaN(raw)) return "time unknown";
-  if (raw <= 0) return "arriving now";
+  if (raw == null || Number.isNaN(raw)) {return "time unknown";}
+  if (raw <= 0) {return "arriving now";}
   const minutes = Math.floor(raw / 60);
   const seconds = Math.floor(raw % 60);
   if (minutes > 0 && seconds > 0) {
     return `arriving in ${minutes} minutes and ${seconds} seconds`;
   }
-  if (minutes > 0) return `arriving in ${minutes} minutes`;
+  if (minutes > 0) {return `arriving in ${minutes} minutes`;}
   return `arriving in ${seconds} seconds`;
 }
 
@@ -77,12 +85,20 @@ export function MetroMap() {
 
   useEffect(() => {
     const svg = wrapperRef.current;
-    if (!svg) return;
+    if (!svg) {return;}
     const map: PathMap = {
-      azul: (svg.querySelector(`#${linePaths.azul.id}`) as SVGPathElement) || undefined,
-      vermelha: (svg.querySelector(`#${linePaths.vermelha.id}`) as SVGPathElement) || undefined,
-      amarela: (svg.querySelector(`#${linePaths.amarela.id}`) as SVGPathElement) || undefined,
-      verde: (svg.querySelector(`#${linePaths.verde.id}`) as SVGPathElement) || undefined,
+      azul:
+        (svg.querySelector(`#${linePaths.azul.id}`) as SVGPathElement) ||
+        undefined,
+      vermelha:
+        (svg.querySelector(`#${linePaths.vermelha.id}`) as SVGPathElement) ||
+        undefined,
+      amarela:
+        (svg.querySelector(`#${linePaths.amarela.id}`) as SVGPathElement) ||
+        undefined,
+      verde:
+        (svg.querySelector(`#${linePaths.verde.id}`) as SVGPathElement) ||
+        undefined,
     };
     setPaths(map);
   }, []);
@@ -91,7 +107,7 @@ export function MetroMap() {
     const result: Record<string, Anchor[]> = {};
     for (const ln of lineNames as LineName[]) {
       const path = paths[ln];
-      if (!path) continue;
+      if (!path) {continue;}
       const stops = lineOrder[ln];
       const length = path.getTotalLength?.() ?? 0;
       const anchorsForLine: Anchor[] = [];
@@ -127,10 +143,14 @@ export function MetroMap() {
         const stopId = stops[i];
         let t = segments === 0 ? 0 : i / segments;
         const dot = dotsById.get(stopId);
-        if (dot) t = projectToT(dot);
+        if (dot) {t = projectToT(dot);}
         const s = t * length;
         const pt = path.getPointAtLength?.(s) as SVGPoint | undefined;
-        anchorsForLine.push({ stopId, pos: t, xy: { x: pt?.x ?? 0, y: pt?.y ?? 0 } });
+        anchorsForLine.push({
+          stopId,
+          pos: t,
+          xy: { x: pt?.x ?? 0, y: pt?.y ?? 0 },
+        });
       }
       result[ln] = anchorsForLine;
     }
@@ -143,7 +163,7 @@ export function MetroMap() {
     let last = 0;
 
     const step = (time: number) => {
-      if (!running) return;
+      if (!running) {return;}
       if (time - last >= RAF_INTERVAL) {
         setTick((value) => (value + 1) & 1023);
         last = time;
@@ -152,14 +172,14 @@ export function MetroMap() {
     };
 
     const start = () => {
-      if (running) return;
+      if (running) {return;}
       running = true;
       last = performance.now();
       raf = requestAnimationFrame(step);
     };
 
     const stop = () => {
-      if (!running) return;
+      if (!running) {return;}
       running = false;
       cancelAnimationFrame(raf);
     };
@@ -192,7 +212,7 @@ export function MetroMap() {
   }, []);
 
   useEffect(() => {
-    if (!snapshot) return;
+    if (!snapshot) {return;}
     const nowMs = performance.now();
     const ageSec = Math.max(0, Date.now() / 1000 - snapshot.t);
     const nextKeys = new Set<string>();
@@ -204,8 +224,15 @@ export function MetroMap() {
         nextKeys.add(key);
         const prev = animRef.current.get(key);
         const remainingSec = Math.max(0.3, train.etaNext - ageSec);
-        const frac = train.etaNext > 0 ? Math.min(ageSec, train.etaNext) / train.etaNext : 0;
-        const predicted = clamp(train.progress01 + (1 - train.progress01) * frac, 0, 1);
+        const frac =
+          train.etaNext > 0
+            ? Math.min(ageSec, train.etaNext) / train.etaNext
+            : 0;
+        const predicted = clamp(
+          train.progress01 + (1 - train.progress01) * frac,
+          0,
+          1
+        );
 
         if (!prev || prev.from !== train.from || prev.to !== train.to) {
           animRef.current.set(key, {
@@ -220,7 +247,8 @@ export function MetroMap() {
         } else {
           const duration = Math.max(1, prev.endAtMs - prev.startAtMs);
           const u = clamp((nowMs - prev.startAtMs) / duration, 0, 1);
-          const current = prev.startProgress + (1 - prev.startProgress) * easeInOut(u);
+          const current =
+            prev.startProgress + (1 - prev.startProgress) * easeInOut(u);
           animRef.current.set(key, {
             key,
             ln,
@@ -247,7 +275,7 @@ export function MetroMap() {
     for (const state of Array.from(animRef.current.values())) {
       const duration = Math.max(1, state.endAtMs - state.startAtMs);
       const u = (now - state.startAtMs) / duration;
-      if (u < 1) continue;
+      if (u < 1) {continue;}
       animRef.current.set(state.key, {
         ...state,
         startProgress: 1,
@@ -263,18 +291,20 @@ export function MetroMap() {
     for (const ln of lineNames as LineName[]) {
       const path = paths[ln];
       const anchorsForLine = anchors[ln];
-      if (!path || !anchorsForLine || anchorsForLine.length === 0) continue;
+      if (!path || !anchorsForLine || anchorsForLine.length === 0) {continue;}
       const length = path.getTotalLength?.() ?? 0;
       const indexMap = new Map<string, number>();
       anchorsForLine.forEach((anchor, idx) => indexMap.set(anchor.stopId, idx));
 
       for (const state of animRef.current.values()) {
-        if (state.ln !== ln) continue;
+        if (state.ln !== ln) {continue;}
         const iFrom = indexMap.get(state.from);
         const iTo = indexMap.get(state.to);
-        if (iFrom == null || iTo == null) continue;
+        if (iFrom == null || iTo == null) {continue;}
 
-        const u = (now - state.startAtMs) / Math.max(1, state.endAtMs - state.startAtMs);
+        const u =
+          (now - state.startAtMs) /
+          Math.max(1, state.endAtMs - state.startAtMs);
         const progress = clamp(
           state.startProgress + (1 - state.startProgress) * easeInOut(u),
           0,
@@ -287,20 +317,32 @@ export function MetroMap() {
         const point = path.getPointAtLength?.(s) as SVGPoint | undefined;
 
         const delta = 2;
-        const p0 = path.getPointAtLength?.(Math.max(0, s - delta)) as SVGPoint | undefined;
-        const p1 = path.getPointAtLength?.(Math.min(length, s + delta)) as SVGPoint | undefined;
+        const p0 = path.getPointAtLength?.(Math.max(0, s - delta)) as
+          | SVGPoint
+          | undefined;
+        const p1 = path.getPointAtLength?.(Math.min(length, s + delta)) as
+          | SVGPoint
+          | undefined;
         const forward = tTo > tFrom;
-        let angleRad = Math.atan2((p1?.y ?? 0) - (p0?.y ?? 0), (p1?.x ?? 0) - (p0?.x ?? 0));
-        if (!forward) angleRad += Math.PI;
+        let angleRad = Math.atan2(
+          (p1?.y ?? 0) - (p0?.y ?? 0),
+          (p1?.x ?? 0) - (p0?.x ?? 0)
+        );
+        if (!forward) {angleRad += Math.PI;}
         const angle = (angleRad * 180) / Math.PI;
-        out.push({ key: state.key, ln, xy: { x: point?.x ?? 0, y: point?.y ?? 0 }, angle });
+        out.push({
+          key: state.key,
+          ln,
+          xy: { x: point?.x ?? 0, y: point?.y ?? 0 },
+          angle,
+        });
       }
     }
     return out;
   }, [paths, anchors, tick]);
 
   useEffect(() => {
-    if (!selectedKey) return;
+    if (!selectedKey) {return;}
     const exists = trainPoints.some((tp) => tp.key === selectedKey);
     if (!exists) {
       setSelectedKey(null);
@@ -344,7 +386,15 @@ export function MetroMap() {
               />
             );
           }
-          return <path key={ln} id={pathDef.id} d={pathDef.d} fill={color} pointerEvents="none" />;
+          return (
+            <path
+              key={ln}
+              id={pathDef.id}
+              d={pathDef.d}
+              fill={color}
+              pointerEvents="none"
+            />
+          );
         })}
 
         {(lineNames as LineName[]).map((ln) => (
@@ -358,9 +408,24 @@ export function MetroMap() {
               const lx = labelXAbs - dx;
               const ly = labelYAbs - dy;
               return (
-                <g key={`station-${ln}-${anchor.stopId}`} className="station" transform={`translate(${dx},${dy})`}>
-                  <circle r={5} fill="#fff" stroke={COLORS[ln]} strokeWidth={4} />
-                  <text className="label" x={lx} y={ly} fontSize={10} fill="var(--metro-label)">
+                <g
+                  key={`station-${ln}-${anchor.stopId}`}
+                  className="station"
+                  transform={`translate(${dx},${dy})`}
+                >
+                  <circle
+                    r={5}
+                    fill="#fff"
+                    stroke={COLORS[ln]}
+                    strokeWidth={4}
+                  />
+                  <text
+                    className="label"
+                    x={lx}
+                    y={ly}
+                    fontSize={10}
+                    fill="var(--metro-label)"
+                  >
                     {info?.name ?? anchor.stopId}
                   </text>
                 </g>
@@ -371,9 +436,16 @@ export function MetroMap() {
 
         <g id="train-layer" style={{ pointerEvents: "auto" }}>
           {trainPoints.map((tp) => {
-            const [lineId, trainId] = tp.key.split(":", 2) as [LineName, string];
-            const meta = snapshot?.lines[lineId]?.trains.find((train) => train.id === trainId);
-            const destination = meta ? stationById[meta.to]?.name ?? meta.to : "destino desconhecido";
+            const [lineId, trainId] = tp.key.split(":", 2) as [
+              LineName,
+              string,
+            ];
+            const meta = snapshot?.lines[lineId]?.trains.find(
+              (train) => train.id === trainId
+            );
+            const destination = meta
+              ? (stationById[meta.to]?.name ?? meta.to)
+              : "destino desconhecido";
             const etaSeconds = meta?.etaNext;
             const ariaLabel = `Train on line ${LINE_LABEL[lineId]} to ${destination}, ${formatEtaAnnounce(etaSeconds)}.`;
             const pressed = selectedKey === tp.key;
@@ -402,11 +474,13 @@ export function MetroMap() {
                 aria-label={ariaLabel}
                 aria-pressed={pressed}
                 className="train-marker"
-                style={{
-                  cursor: "pointer",
-                  outline: "none",
-                  "--focus-ring": COLORS[lineId],
-                } as CSSProperties}
+                style={
+                  {
+                    cursor: "pointer",
+                    outline: "none",
+                    "--focus-ring": COLORS[lineId],
+                  } as CSSProperties
+                }
               >
                 <rect
                   className="focus-target"
@@ -429,86 +503,134 @@ export function MetroMap() {
                   stroke="#111"
                   strokeWidth={1}
                 />
-                <rect x={-5.5} y={-3} width={3.5} height={6} rx={1} fill="#fff" opacity={0.9} />
-                <rect x={-1} y={-3} width={3.5} height={6} rx={1} fill="#fff" opacity={0.9} />
-                <circle cx={10} cy={0} r={1.4} fill="#fff" stroke="#111" strokeWidth={1} />
+                <rect
+                  x={-5.5}
+                  y={-3}
+                  width={3.5}
+                  height={6}
+                  rx={1}
+                  fill="#fff"
+                  opacity={0.9}
+                />
+                <rect
+                  x={-1}
+                  y={-3}
+                  width={3.5}
+                  height={6}
+                  rx={1}
+                  fill="#fff"
+                  opacity={0.9}
+                />
+                <circle
+                  cx={10}
+                  cy={0}
+                  r={1.4}
+                  fill="#fff"
+                  stroke="#111"
+                  strokeWidth={1}
+                />
               </g>
             );
           })}
         </g>
 
-        {selectedKey && snapshot && (() => {
-          const trainPoint = trainPoints.find((item) => item.key === selectedKey);
-          if (!trainPoint) return null;
-          const [lineId, trainId] = selectedKey.split(":", 2) as [LineName, string];
-          const train = snapshot.lines[lineId]?.trains.find((item) => item.id === trainId);
-          if (!train) return null;
+        {selectedKey &&
+          snapshot &&
+          (() => {
+            const trainPoint = trainPoints.find(
+              (item) => item.key === selectedKey
+            );
+            if (!trainPoint) {return null;}
+            const [lineId, trainId] = selectedKey.split(":", 2) as [
+              LineName,
+              string,
+            ];
+            const train = snapshot.lines[lineId]?.trains.find(
+              (item) => item.id === trainId
+            );
+            if (!train) {return null;}
 
-          const etaShort = formatEtaShort(train.etaNext);
-          const nextName = stationById[train.to]?.name ?? train.to;
+            const etaShort = formatEtaShort(train.etaNext);
+            const nextName = stationById[train.to]?.name ?? train.to;
 
-          const title = `Next: ${nextName}`;
-          const subtitle = `ETA: ${etaShort}`;
+            const title = `Next: ${nextName}`;
+            const subtitle = `ETA: ${etaShort}`;
 
-          const fontTitle = 9;
-          const fontSubtitle = 8;
-          const padX = 12;
-          const padY = 8;
-          const gap = 4;
-          const approx = (text: string, size: number) => Math.max(40, text.length * size * 0.62);
-          const width = Math.ceil(Math.max(approx(title, fontTitle), approx(subtitle, fontSubtitle)) + padX * 2);
-          const height = Math.ceil(padY * 2 + fontTitle + gap + fontSubtitle);
+            const fontTitle = 9;
+            const fontSubtitle = 8;
+            const padX = 12;
+            const padY = 8;
+            const gap = 4;
+            const approx = (text: string, size: number) =>
+              Math.max(40, text.length * size * 0.62);
+            const width = Math.ceil(
+              Math.max(
+                approx(title, fontTitle),
+                approx(subtitle, fontSubtitle)
+              ) +
+                padX * 2
+            );
+            const height = Math.ceil(padY * 2 + fontTitle + gap + fontSubtitle);
 
-          let sideRight = true;
-          let boxX = trainPoint.xy.x + 10;
-          let boxY = trainPoint.xy.y - height / 2;
-          if (boxX + width > viewBox.width) {
-            sideRight = false;
-            boxX = trainPoint.xy.x - 10 - width;
-          }
-          boxY = clamp(boxY, 2, viewBox.height - height - 2);
+            let sideRight = true;
+            let boxX = trainPoint.xy.x + 10;
+            let boxY = trainPoint.xy.y - height / 2;
+            if (boxX + width > viewBox.width) {
+              sideRight = false;
+              boxX = trainPoint.xy.x - 10 - width;
+            }
+            boxY = clamp(boxY, 2, viewBox.height - height - 2);
 
-          return (
-            <g transform={`translate(${boxX},${boxY})`} onClick={(event) => event.stopPropagation()} aria-live="polite">
-              <rect
-                x={0}
-                y={0}
-                width={width}
-                height={height}
-                rx={10}
-                fill="var(--tooltip-bg)"
-                stroke="var(--tooltip-border)"
-                strokeWidth={1}
-              />
-              {sideRight ? (
-                <path
-                  d={`M0 ${height / 2 - 5} L0 ${height / 2 + 5} L-8 ${height / 2} Z`}
-                  fill="var(--tooltip-bg)"
-                  stroke="var(--tooltip-border)"
-                  strokeWidth={1}
-                />
-              ) : (
-                <path
-                  d={`M${width} ${height / 2 - 5} L${width} ${height / 2 + 5} L${width + 8} ${height / 2} Z`}
-                  fill="var(--tooltip-bg)"
-                  stroke="var(--tooltip-border)"
-                  strokeWidth={1}
-                />
-              )}
-              <text x={padX} y={padY + fontTitle} fontSize={fontTitle} fill="var(--tooltip-fg)">
-                {title}
-              </text>
-              <text
-                x={padX}
-                y={padY + fontTitle + gap + fontSubtitle - 1}
-                fontSize={fontSubtitle}
-                fill="var(--tooltip-muted)"
+            return (
+              <g
+                transform={`translate(${boxX},${boxY})`}
+                onClick={(event) => event.stopPropagation()}
+                aria-live="polite"
               >
-                {subtitle}
-              </text>
-            </g>
-          );
-        })()}
+                <rect
+                  x={0}
+                  y={0}
+                  width={width}
+                  height={height}
+                  rx={10}
+                  fill="var(--tooltip-bg)"
+                  stroke="var(--tooltip-border)"
+                  strokeWidth={1}
+                />
+                {sideRight ? (
+                  <path
+                    d={`M0 ${height / 2 - 5} L0 ${height / 2 + 5} L-8 ${height / 2} Z`}
+                    fill="var(--tooltip-bg)"
+                    stroke="var(--tooltip-border)"
+                    strokeWidth={1}
+                  />
+                ) : (
+                  <path
+                    d={`M${width} ${height / 2 - 5} L${width} ${height / 2 + 5} L${width + 8} ${height / 2} Z`}
+                    fill="var(--tooltip-bg)"
+                    stroke="var(--tooltip-border)"
+                    strokeWidth={1}
+                  />
+                )}
+                <text
+                  x={padX}
+                  y={padY + fontTitle}
+                  fontSize={fontTitle}
+                  fill="var(--tooltip-fg)"
+                >
+                  {title}
+                </text>
+                <text
+                  x={padX}
+                  y={padY + fontTitle + gap + fontSubtitle - 1}
+                  fontSize={fontSubtitle}
+                  fill="var(--tooltip-muted)"
+                >
+                  {subtitle}
+                </text>
+              </g>
+            );
+          })()}
       </svg>
       <style>{`
         .station .label{opacity:0;transition:opacity .12s ease-out;pointer-events:none}
@@ -521,13 +643,3 @@ export function MetroMap() {
     </div>
   );
 }
-
-
-
-
-
-
-
-
-
-

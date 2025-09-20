@@ -1,0 +1,1 @@
+- 2025-09-19 – Established shared config/themes/locales scaffolding and frontend providers. **Why:** align repo with AGENTS Phase 1 requirements. **Refs:** Phase 1 orchestrator

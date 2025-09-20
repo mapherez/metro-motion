@@ -1,0 +1,7 @@
+{
+  "$schema": "../../config/schemas/locale.schema.json",
+  "errors.generic": "Ocorreu um erro.",
+  "errors.retry": "Tentar novamente",
+  "errors.offline": "Está offline. Verifique a ligação."
+}
+

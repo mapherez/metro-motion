@@ -1,0 +1,41 @@
+{
+  "$schema": "../schemas/theme.schema.json",
+  "name": "light",
+  "foundations": {
+    "palette": {
+      "neutral": ["#0b0b0b", "#1a1a1a", "#2a2a2a", "#e5e7eb", "#f5f7fa", "#ffffff"],
+      "primary": ["#0b3aa8", "#2563eb", "#93c5fd"],
+      "accent": ["#0f766e", "#14b8a6", "#5eead4"],
+      "danger": ["#7f1d1d", "#ef4444", "#fee2e2"],
+      "warning": ["#854d0e", "#f59e0b", "#fef3c7"]
+    },
+    "radius": { "sm": 4, "md": 8, "lg": 12 },
+    "shadow": {
+      "sm": "0 1px 2px rgba(0,0,0,.06)",
+      "md": "0 4px 10px rgba(0,0,0,.10)"
+    },
+    "typography": {
+      "fontFamily": "Inter, system-ui, sans-serif",
+      "scale": { "sm": 14, "md": 16, "lg": 20 }
+    }
+  },
+  "semantic": {
+    "color": {
+      "bg": "{palette.neutral[5]}",
+      "surface": "{palette.neutral[4]}",
+      "overlay": "rgba(0,0,0,.5)",
+      "text": "{palette.neutral[0]}",
+      "text-muted": "{palette.neutral[2]}",
+      "border": "rgba(0,0,0,.12)",
+      "primary": "{palette.primary[1]}",
+      "on-primary": "#ffffff",
+      "accent": "{palette.accent[1]}",
+      "danger": "{palette.danger[1]}",
+      "warning": "{palette.warning[1]}"
+    },
+    "radius": "{radius}",
+    "shadow": "{shadow}",
+    "zIndex": { "dropdown": 1000, "modal": 1100, "toast": 1200 }
+  }
+}
+

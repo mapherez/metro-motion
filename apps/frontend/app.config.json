@@ -1,0 +1,10 @@
+{
+  "$schema": "../../config/schemas/app-config.schema.json",
+  "featureFlags": {
+    "liveData": true
+  },
+  "routes": {
+    "feedback": "https://metro.example.com/frontend-feedback"
+  }
+}
+

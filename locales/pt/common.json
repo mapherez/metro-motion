@@ -1,0 +1,12 @@
+{
+  "$schema": "../../config/schemas/locale.schema.json",
+  "APP_TITLE": "Metro Motion",
+  "APP_TAGLINE": "Acompanhe o pulso da rede em tempo real",
+  "HOME_HERO_ALT": "Mapa do metro animado com comboios em movimento",
+  "HOME_OPEN_LINE": "Abrir {line}",
+  "HOME_VIEW_STOPS": "Ver paragens e ETAs",
+  "LINE_AZUL_LABEL": "Linha Azul",
+  "LINE_AMARELA_LABEL": "Linha Amarela",
+  "LINE_VERDE_LABEL": "Linha Verde",
+  "LINE_VERMELHA_LABEL": "Linha Vermelha"
+}

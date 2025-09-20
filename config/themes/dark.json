@@ -1,0 +1,21 @@
+{
+  "$schema": "../schemas/theme.schema.json",
+  "name": "dark",
+  "extends": "light",
+  "semantic": {
+    "color": {
+      "bg": "#0f172a",
+      "surface": "#1e293b",
+      "overlay": "rgba(0,0,0,.6)",
+      "text": "#f1f5f9",
+      "text-muted": "#cbd5f5",
+      "border": "rgba(255,255,255,.12)",
+      "primary": "#38bdf8",
+      "on-primary": "#0f172a",
+      "accent": "#f97316",
+      "danger": "#f87171",
+      "warning": "#facc15"
+    }
+  }
+}
+

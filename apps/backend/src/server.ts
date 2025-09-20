@@ -1,7 +1,8 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
+import { SnapshotSchema } from '@metro/shared-types';
+
 import { config } from './config.js';
-import { Snapshot as SnapshotSchema } from '@metro/shared-types';
 import { createRedis } from './redis.js';
 
 export function buildServer() {
@@ -71,7 +72,7 @@ export function buildServer() {
     const heartbeat = setInterval(() => {
       try {
         reply.raw.write(`: ping ${Date.now()}\n\n`);
-      } catch {}
+      } catch { /* no-op */ }
     }, 20000);
 
     // Subscribe to Redis channel
@@ -98,18 +99,18 @@ export function buildServer() {
           send(raw);
         }
       }
-    } catch {}
+    } catch { /* no-op */ }
 
     const close = async () => {
       clearInterval(heartbeat);
       try {
         sub.off('message', onMessage);
         await sub.unsubscribe(config.redis.channel);
-        if (typeof sub.quit === 'function') await sub.quit();
-      } catch {}
+        if (typeof sub.quit === 'function') {await sub.quit();}
+      } catch { /* no-op */ }
       try {
         reply.raw.end();
-      } catch {}
+      } catch { /* no-op */ }
     };
 
     req.raw.on('close', close);
