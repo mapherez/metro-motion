@@ -1,4 +1,10 @@
-import type { Snapshot as SnapshotT, Train as TrainT } from "@metro/shared-types";
+import type {
+  LineName,
+  Snapshot as SnapshotT,
+  StationEta as StationEtaT,
+  StationEtaSnapshot,
+  Train as TrainT
+} from "@metro/shared-types";
 import { destinos, neighborForDirection, lineNames } from "@metro/station-data";
 import { lineOrder } from "@metro/station-data";
 
@@ -33,6 +39,19 @@ export type InferredTrain = {
   progress01: number;
   dest: string; // human name
 };
+
+const TRAIN_SUFFIX_TO_LINE: Record<string, LineName> = {
+  A: "azul",
+  B: "amarela",
+  C: "verde",
+  D: "vermelha"
+};
+
+function lineFromTrainId(trainId: string | undefined): LineName | undefined {
+  if (!trainId) return undefined;
+  const suffix = trainId.trim().slice(-1).toUpperCase();
+  return TRAIN_SUFFIX_TO_LINE[suffix];
+}
 
 // Build trains by aggregating per train and inferring direction using nearest two stops
 export function normalizeTempoEspera(
@@ -131,4 +150,69 @@ export function toSnapshot(trains: InferredTrain[], overrides: Partial<SnapshotT
   }
   const base: SnapshotT = { t, lines, serviceOpen: true };
   return { ...base, ...overrides } as SnapshotT;
+}
+
+export function buildStationEtaSnapshot(data: TempoEsperaResponse): StationEtaSnapshot {
+  const rows: TempoEsperaItem[] = Array.isArray((data as any)?.resposta) ? ((data as any).resposta as TempoEsperaItem[]) : [];
+  const now = Math.floor(Date.now() / 1000);
+
+  const perLine: Record<LineName, Map<string, StationEtaT>> = {
+    verde: new Map(),
+    azul: new Map(),
+    amarela: new Map(),
+    vermelha: new Map()
+  };
+
+  for (const row of rows) {
+    const triplets: Array<[string | undefined, string | undefined]> = [
+      [row.comboio, row.tempoChegada1],
+      [row.comboio2, row.tempoChegada2],
+      [row.comboio3, row.tempoChegada3]
+    ];
+
+    for (const [trainId, etaStr] of triplets) {
+      if (!trainId || !etaStr) continue;
+      const etaSeconds = parseInt(etaStr, 10);
+      if (!Number.isFinite(etaSeconds)) continue;
+      const line = lineFromTrainId(trainId);
+      if (!line) continue;
+      if (!lineOrder[line].includes(row.stop_id)) continue;
+
+      const stationMap = perLine[line];
+      let station = stationMap.get(row.stop_id);
+      if (!station) {
+        station = { stationId: row.stop_id, arrivals: [] };
+        stationMap.set(row.stop_id, station);
+      }
+
+      station.arrivals.push({
+        trainId,
+        etaSeconds,
+        destinoId: row.destino,
+        destination: row.destino ? destinos[row.destino]?.name : undefined
+      });
+    }
+  }
+
+  const lines: StationEtaSnapshot["lines"] = {
+    verde: { stations: [] },
+    azul: { stations: [] },
+    amarela: { stations: [] },
+    vermelha: { stations: [] }
+  };
+
+  for (const line of lineNames) {
+    const stationMap = perLine[line];
+    const stations: StationEtaT[] = lineOrder[line].map((stationId) => {
+      const entry = stationMap.get(stationId);
+      if (!entry) {
+        return { stationId, arrivals: [] };
+      }
+      entry.arrivals.sort((a, b) => a.etaSeconds - b.etaSeconds);
+      return entry;
+    });
+    lines[line] = { stations };
+  }
+
+  return { t: now, lines };
 }

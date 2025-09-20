@@ -22,6 +22,7 @@ export const config = {
     token: process.env.REDIS_TOKEN || '',
     ttlSeconds: intFromEnv('REDIS_TTL_SECONDS', 15),
     channel: process.env.REDIS_CHANNEL || 'metro:events',
-    snapshotKey: process.env.REDIS_SNAPSHOT_KEY || 'metro:snapshot'
+    snapshotKey: process.env.REDIS_SNAPSHOT_KEY || 'metro:snapshot',
+    stationEtaKey: process.env.REDIS_STATION_ETA_KEY || 'metro:station-etas'
   }
 };

@@ -4,9 +4,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRedis } from './redis.js';
 import type { TempoEsperaResponse } from '@metro/shared-utils';
-import { normalizeTempoEspera, toSnapshot } from '@metro/shared-utils';
+import { buildStationEtaSnapshot, normalizeTempoEspera, toSnapshot } from '@metro/shared-utils';
 import { Snapshot as SnapshotSchema } from '@metro/shared-types';
-import type { Snapshot } from '@metro/shared-types';
+import type { Snapshot, StationEtaSnapshot } from '@metro/shared-types';
 
 const METRO_ENDPOINT = 'tempoEspera/Estacao/todos';
 
@@ -50,6 +50,7 @@ export class Ingestor {
   private redis = createRedis();
   private prevState = new Map<string, { to: string; segmentStartEta: number; t: number }>();
   private lastSnapshot?: Snapshot;
+  private lastStationEtas?: StationEtaSnapshot;
   private lastPublishAt = 0;
   private serviceOpen = true;
 
@@ -90,6 +91,18 @@ export class Ingestor {
     // eslint-disable-next-line no-console
     console.log(`[ingestor] ${label} -> ${config.redis.channel}`);
     this.lastPublishAt = Date.now();
+  }
+
+  private async storeStationEtas(snapshot: StationEtaSnapshot) {
+    if (!config.redis.url) {
+      return;
+    }
+    await (this.redis as any).set(
+      config.redis.stationEtaKey,
+      JSON.stringify(snapshot),
+      'EX',
+      config.redis.ttlSeconds
+    );
   }
 
   private buildClosedSnapshot(): Snapshot {
@@ -169,6 +182,9 @@ export class Ingestor {
           const closedSnapshot = this.buildClosedSnapshot();
           await this.publishSnapshot(closedSnapshot, 'service closed snapshot broadcast');
           this.lastSnapshot = closedSnapshot;
+          const emptyStationEtas = buildStationEtaSnapshot({ resposta: [] });
+          this.lastStationEtas = emptyStationEtas;
+          await this.storeStationEtas(emptyStationEtas);
         } catch (err) {
           // eslint-disable-next-line no-console
           console.error('[ingestor] failed to publish closed snapshot:', err);
@@ -189,6 +205,16 @@ export class Ingestor {
     try {
       const data = await this.fetchTempoEspera();
       if (data) {
+        if (Array.isArray((data as any)?.resposta)) {
+          try {
+            const stationEtas = buildStationEtaSnapshot(data as TempoEsperaResponse);
+            this.lastStationEtas = stationEtas;
+            await this.storeStationEtas(stationEtas);
+          } catch (err) {
+            // eslint-disable-next-line no-console
+            console.error('[ingestor] failed to process station ETAs:', err);
+          }
+        }
         let snapshot: Snapshot;
         // Accept either the raw Metro model or a pre-normalized Snapshot model
         if (typeof (data as any).t === 'number' && typeof (data as any).lines === 'object') {
@@ -225,6 +251,16 @@ export class Ingestor {
         try {
           const stale = { ...this.lastSnapshot, serviceOpen: true };
           await this.publishSnapshot(stale, 're-published last snapshot (stale)');
+        } catch {}
+      }
+      if (this.lastStationEtas && config.redis.url) {
+        try {
+          const staleStationEtas: StationEtaSnapshot = {
+            ...this.lastStationEtas,
+            t: Math.floor(Date.now() / 1000)
+          };
+          this.lastStationEtas = staleStationEtas;
+          await this.storeStationEtas(staleStationEtas);
         } catch {}
       }
     } finally {

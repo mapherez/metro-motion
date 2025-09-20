@@ -1,7 +1,7 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import { config } from './config.js';
-import { Snapshot as SnapshotSchema } from '@metro/shared-types';
+import { Snapshot as SnapshotSchema, StationEtaSnapshot as StationEtaSnapshotSchema, LineNameEnum } from '@metro/shared-types';
 import { createRedis } from './redis.js';
 
 export function buildServer() {
@@ -41,6 +41,50 @@ export function buildServer() {
       return parsed.data;
     } catch (err) {
       app.log.error({ err }, 'Error handling /now');
+      return reply.code(500).send({ error: 'Internal error' });
+    }
+  });
+
+  app.get('/lines/:lineId/etas', async (req, reply) => {
+    const params = req.params as { lineId?: string };
+    const lineIdRaw = params.lineId?.toLowerCase();
+    const parsedLine = LineNameEnum.safeParse(lineIdRaw);
+    if (!parsedLine.success) {
+      return reply.code(404).send({ error: 'Unknown line' });
+    }
+    const lineId = parsedLine.data;
+
+    try {
+      if (!config.redis.url) {
+        return reply.code(204).send();
+      }
+      const raw = await (redis as any).get(config.redis.stationEtaKey);
+      if (!raw) {
+        return reply.code(204).send();
+      }
+      let json: unknown;
+      try {
+        json = JSON.parse(raw);
+      } catch (e) {
+        app.log.error({ err: e }, 'Invalid station ETA JSON in Redis');
+        return reply.code(500).send({ error: 'Invalid station ETA JSON' });
+      }
+      const parsed = StationEtaSnapshotSchema.safeParse(json);
+      if (!parsed.success) {
+        app.log.error({ issues: parsed.error.issues }, 'Station ETA snapshot validation failed');
+        return reply.code(500).send({ error: 'Invalid station ETA schema' });
+      }
+      const lineData = parsed.data.lines[lineId as keyof typeof parsed.data.lines];
+      if (!lineData) {
+        return reply.code(204).send();
+      }
+      return {
+        line: lineId,
+        t: parsed.data.t,
+        stations: lineData.stations
+      };
+    } catch (err) {
+      app.log.error({ err }, 'Error handling /lines/:lineId/etas');
       return reply.code(500).send({ error: 'Internal error' });
     }
   });
