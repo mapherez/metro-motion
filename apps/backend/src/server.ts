@@ -1,5 +1,9 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
+import fastifyStatic from '@fastify/static';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { existsSync, readFileSync } from 'node:fs';
 import { config } from './config.js';
 import { Snapshot as SnapshotSchema, StationEtaSnapshot as StationEtaSnapshotSchema, LineNameEnum } from '@metro/shared-types';
 import { createRedis } from './redis.js';
@@ -12,6 +16,39 @@ export function buildServer() {
   app.register(cors, {
     origin: config.corsOrigin
   });
+
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = path.dirname(__filename);
+  const defaultFrontendDist = path.resolve(__dirname, '../../frontend/dist');
+  const frontendCandidates = [config.frontend.distDir, defaultFrontendDist].filter(Boolean) as string[];
+  const frontendDir = frontendCandidates.find((dir) => existsSync(dir));
+
+  if (frontendDir) {
+    app.log.info({ frontendDir }, 'Serving frontend assets');
+    app.register(fastifyStatic, {
+      root: frontendDir,
+      prefix: '/',
+      index: false,
+      wildcard: false
+    });
+
+    const indexPath = path.join(frontendDir, 'index.html');
+    const indexHtml = existsSync(indexPath) ? readFileSync(indexPath, 'utf8') : undefined;
+
+    if (indexHtml) {
+      app.setNotFoundHandler((req, reply) => {
+        const accept = req.headers['accept'];
+        const wantsHtml = typeof accept === 'string' && accept.includes('text/html');
+        if (req.method === 'GET' && wantsHtml) {
+          reply.type('text/html').send(indexHtml);
+          return;
+        }
+        reply.code(404).send({ error: 'Not found' });
+      });
+    }
+  } else {
+    app.log.warn('Frontend dist directory not found, SPA routes will return 404');
+  }
 
   // Routes
   app.get('/healthz', async () => ({ ok: true }));
