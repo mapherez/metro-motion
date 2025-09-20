@@ -126,20 +126,30 @@ export function LineView() {
   );
 
   return (
-    <div className="space-y-4 px-4 py-4">
-      <header className="space-y-1">
-        <p className="text-sm uppercase tracking-wide text-muted">Linha</p>
-        <h1 className="text-2xl font-semibold">{LABEL_BY_LINE[ln]}</h1>
+    <div className="flex flex-col">
+      <header className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-white/10 bg-[var(--bg)]/90 px-4 py-3 backdrop-blur">
+        <Link
+          to="/"
+          className={`inline-flex items-center gap-2 rounded-full border border-white/10 bg-[var(--bg-soft)] px-4 py-2 text-sm font-medium text-[var(--fg)] transition-colors hover:text-[var(--fg)] ${focusRing}`}
+        >
+          <span aria-hidden>&lt;</span>
+          <span>Voltar</span>
+        </Link>
+        <div className="flex flex-col items-end text-right">
+          <p className="text-xs uppercase tracking-wide text-muted">Linha</p>
+          <p className="text-sm font-semibold text-[var(--fg)]">{LABEL_BY_LINE[ln]}</p>
+        </div>
       </header>
-      {error ? (
-        <p className="text-sm text-[var(--alert-error)]">{error}</p>
-      ) : null}
-      <ol className="space-y-3">
-        {lineOrder[ln].map((stationId) => {
-          const station = stationById[stationId];
-          return (
-            <li
-              key={stationId}
+      <div className="space-y-4 px-4 py-4">
+        {error ? (
+          <p className="text-sm text-[var(--alert-error)]">{error}</p>
+        ) : null}
+        <ol className="space-y-3">
+          {lineOrder[ln].map((stationId) => {
+            const station = stationById[stationId];
+            return (
+              <li
+                key={stationId}
               className="flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-[var(--bg-soft)] px-4 py-3"
             >
               <div className="flex items-center gap-3">
@@ -152,16 +162,11 @@ export function LineView() {
               </div>
               <span className="text-sm text-muted">{nextEta(stationId)}</span>
             </li>
-          );
-        })}
-      </ol>
-      {loading ? <p className="text-xs text-muted">Atualizando tempos…</p> : null}
-      <Link
-        to="/"
-        className={`inline-flex min-h-11 items-center justify-center rounded-full border border-white/10 bg-[var(--bg-soft)] px-5 text-sm font-medium text-[var(--fg)] transition-colors hover:text-[var(--fg)] ${focusRing}`}
-      >
-        Voltar ao mapa
-      </Link>
+            );
+          })}
+        </ol>
+        {loading ? <p className="text-xs text-muted">Atualizando tempos…</p> : null}
+      </div>
     </div>
   );
 }
