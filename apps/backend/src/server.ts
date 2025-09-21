@@ -36,6 +36,15 @@ export function buildServer() {
     const indexHtml = existsSync(indexPath) ? readFileSync(indexPath, 'utf8') : undefined;
 
     if (indexHtml) {
+      const apiPrefixes = ['/healthz', '/now', '/lines', '/stream'];
+      app.get('/*', (req, reply) => {
+        const url = req.raw.url || '';
+        if (apiPrefixes.some((prefix) => url.startsWith(prefix))) {
+          return reply.code(404).send({ error: 'Not found' });
+        }
+        reply.type('text/html').send(indexHtml);
+      });
+
       app.setNotFoundHandler((req, reply) => {
         const accept = req.headers['accept'];
         const wantsHtml = typeof accept === 'string' && accept.includes('text/html');
