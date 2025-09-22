@@ -1,6 +1,11 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
-import { SnapshotSchema } from '@metro/shared-types';
+import fastifyStatic from '@fastify/static';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { existsSync, readFileSync } from 'node:fs';
+
+import { SnapshotSchema, StationEtaSnapshot as StationEtaSnapshotSchema, LineNameEnum } from '@metro/shared-types';
 
 import { config } from './config.js';
 import { createRedis } from './redis.js';
@@ -9,15 +14,54 @@ export function buildServer() {
   const app = Fastify({ logger: true });
   const redis = createRedis();
 
-  // CORS
   app.register(cors, {
     origin: config.corsOrigin
   });
 
-  // Routes
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = path.dirname(__filename);
+  const defaultFrontendDist = path.resolve(__dirname, '../../frontend/dist');
+  const frontendCandidates = [config.frontend.distDir, defaultFrontendDist].filter(Boolean) as string[];
+  const frontendDir = frontendCandidates.find((dir) => existsSync(dir));
+
+  if (frontendDir) {
+    app.log.info({ frontendDir }, 'Serving frontend assets');
+    app.register(fastifyStatic, {
+      root: frontendDir,
+      prefix: '/',
+      index: false,
+      wildcard: false
+    });
+
+    const indexPath = path.join(frontendDir, 'index.html');
+    const indexHtml = existsSync(indexPath) ? readFileSync(indexPath, 'utf8') : undefined;
+
+    if (indexHtml) {
+      const apiPrefixes = ['/healthz', '/now', '/lines', '/stream'];
+      app.get('/*', (req, reply) => {
+        const url = req.raw.url || '';
+        if (apiPrefixes.some((prefix) => url.startsWith(prefix))) {
+          return reply.code(404).send({ error: 'Not found' });
+        }
+        reply.type('text/html').send(indexHtml);
+      });
+
+      app.setNotFoundHandler((req, reply) => {
+        const accept = req.headers['accept'];
+        const wantsHtml = typeof accept === 'string' && accept.includes('text/html');
+        if (req.method === 'GET' && wantsHtml) {
+          reply.type('text/html').send(indexHtml);
+          return;
+        }
+        reply.code(404).send({ error: 'Not found' });
+      });
+    }
+  } else {
+    app.log.warn('Frontend dist directory not found, SPA routes will return 404');
+  }
+
   app.get('/healthz', async () => ({ ok: true }));
 
-  // Placeholder: will read from Redis in task 3
   app.get('/now', async (_req, reply) => {
     try {
       if (!config.redis.url) {
@@ -46,13 +90,55 @@ export function buildServer() {
     }
   });
 
-  // Placeholder: SSE stream, will be implemented in task 4
+  app.get('/lines/:lineId/etas', async (req, reply) => {
+    const params = req.params as { lineId?: string };
+    const lineIdRaw = params.lineId?.toLowerCase();
+    const parsedLine = LineNameEnum.safeParse(lineIdRaw);
+    if (!parsedLine.success) {
+      return reply.code(404).send({ error: 'Unknown line' });
+    }
+    const lineId = parsedLine.data;
+
+    try {
+      if (!config.redis.url) {
+        return reply.code(204).send();
+      }
+      const raw = await (redis as any).get(config.redis.stationEtaKey);
+      if (!raw) {
+        return reply.code(204).send();
+      }
+      let json: unknown;
+      try {
+        json = JSON.parse(raw);
+      } catch (e) {
+        app.log.error({ err: e }, 'Invalid station ETA JSON in Redis');
+        return reply.code(500).send({ error: 'Invalid station ETA JSON' });
+      }
+      const parsed = StationEtaSnapshotSchema.safeParse(json);
+      if (!parsed.success) {
+        app.log.error({ issues: parsed.error.issues }, 'Station ETA snapshot validation failed');
+        return reply.code(500).send({ error: 'Invalid station ETA schema' });
+      }
+      const lineData = parsed.data.lines[lineId as keyof typeof parsed.data.lines];
+      if (!lineData) {
+        return reply.code(204).send();
+      }
+      return {
+        line: lineId,
+        t: parsed.data.t,
+        stations: lineData.stations
+      };
+    } catch (err) {
+      app.log.error({ err }, 'Error handling /lines/:lineId/etas');
+      return reply.code(500).send({ error: 'Internal error' });
+    }
+  });
+
   app.get('/stream', async (req, reply) => {
     if (!config.redis.url) {
       return reply.code(503).send({ error: 'SSE unavailable: Redis not configured' });
     }
 
-    // Prepare SSE headers
     reply.raw.setHeader('Access-Control-Allow-Origin', config.corsOrigin);
     reply.raw.setHeader('Content-Type', 'text/event-stream');
     reply.raw.setHeader('Cache-Control', 'no-cache, no-transform');
@@ -68,14 +154,14 @@ export function buildServer() {
       }
     };
 
-    // Heartbeat every ~20s to keep connection alive
     const heartbeat = setInterval(() => {
       try {
         reply.raw.write(`: ping ${Date.now()}\n\n`);
-      } catch { /* no-op */ }
+      } catch {
+        // ignore
+      }
     }, 20000);
 
-    // Subscribe to Redis channel
     const sub = await (redis as any).duplicate();
     await sub.subscribe(config.redis.channel);
     const onMessage = (_channel: string, message: string) => {
@@ -83,13 +169,11 @@ export function buildServer() {
         const json = JSON.parse(message);
         send(json);
       } catch {
-        // send raw if not JSON
         send(message);
       }
     };
     sub.on('message', onMessage);
 
-    // Send last snapshot immediately if present
     try {
       const raw = await (redis as any).get(config.redis.snapshotKey);
       if (raw) {
@@ -99,18 +183,26 @@ export function buildServer() {
           send(raw);
         }
       }
-    } catch { /* no-op */ }
+    } catch {
+      // ignore
+    }
 
     const close = async () => {
       clearInterval(heartbeat);
       try {
         sub.off('message', onMessage);
         await sub.unsubscribe(config.redis.channel);
-        if (typeof sub.quit === 'function') {await sub.quit();}
-      } catch { /* no-op */ }
+        if (typeof sub.quit === 'function') {
+          await sub.quit();
+        }
+      } catch {
+        // ignore
+      }
       try {
         reply.raw.end();
-      } catch { /* no-op */ }
+      } catch {
+        // ignore
+      }
     };
 
     req.raw.on('close', close);

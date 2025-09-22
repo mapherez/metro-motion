@@ -3,6 +3,8 @@ import { createContext, useContext } from "react";
 import type { ThemeName } from "./app/providers";
 import type { Snapshot } from "@metro/shared-types";
 
+export type ThemeMode = ThemeName;
+
 export type ShellContextValue = {
   theme: ThemeName;
   setTheme: (mode: ThemeName) => void;

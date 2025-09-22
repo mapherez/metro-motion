@@ -1,5 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import {
+  type Dispatch,
+  type ReactNode,
+  type SetStateAction,
+  useEffect,
+  useMemo,
+  useState
+} from "react";
+import { BrowserRouter, Route, Routes, useLocation } from "react-router-dom";
 
 import { useSnapshotStore } from "./state";
 import { Shell } from "./Shell";
@@ -8,9 +15,10 @@ import { About } from "./views/About";
 import { LineView } from "./views/LineView";
 import { ShellContext } from "./shell-context";
 import { useTheme } from "./app/providers";
+import type { Snapshot } from "@metro/shared-types";
 
 export function App() {
-  const API_BASE = import.meta.env.DEV ? "/api" : import.meta.env.VITE_API_BASE;
+  const apiBase = import.meta.env.DEV ? "/api" : import.meta.env.VITE_API_BASE;
   const snapshot = useSnapshotStore((s) => s.snapshot);
   const setSnapshot = useSnapshotStore((s) => s.setSnapshot);
   const { theme, setTheme, toggleTheme } = useTheme();
@@ -20,14 +28,80 @@ export function App() {
   const [sinceText, setSinceText] = useState("");
   const [serviceOpen, setServiceOpen] = useState<boolean | null>(null);
 
+  const contextValue = useMemo(
+    () => ({
+      theme,
+      setTheme,
+      toggleTheme,
+      snapshot,
+      serviceOpen,
+      sinceText,
+      loading,
+      error
+    }),
+    [theme, setTheme, toggleTheme, snapshot, serviceOpen, sinceText, loading, error]
+  );
+
+  return (
+    <ShellContext.Provider value={contextValue}>
+      <BrowserRouter>
+        <SnapshotSync
+          apiBase={apiBase}
+          setSnapshot={setSnapshot}
+          setServiceOpen={setServiceOpen}
+          setError={setError}
+          setLoading={setLoading}
+          snapshot={snapshot}
+          serviceOpen={serviceOpen}
+          setSinceText={setSinceText}
+        >
+          <Routes>
+            <Route element={<Shell />}>
+              <Route index element={<Home />} />
+              <Route path="about" element={<About />} />
+              <Route path="line/:id" element={<LineView />} />
+            </Route>
+          </Routes>
+        </SnapshotSync>
+      </BrowserRouter>
+    </ShellContext.Provider>
+  );
+}
+
+type SnapshotSyncProps = {
+  apiBase: string;
+  setSnapshot: (snapshot: Snapshot | null) => void;
+  setServiceOpen: Dispatch<SetStateAction<boolean | null>>;
+  setError: Dispatch<SetStateAction<string | null>>;
+  setLoading: Dispatch<SetStateAction<boolean>>;
+  snapshot: Snapshot | null;
+  serviceOpen: boolean | null;
+  setSinceText: Dispatch<SetStateAction<string>>;
+  children: ReactNode;
+};
+
+function SnapshotSync({
+  apiBase,
+  setSnapshot,
+  setServiceOpen,
+  setError,
+  setLoading,
+  snapshot,
+  serviceOpen,
+  setSinceText,
+  children
+}: SnapshotSyncProps) {
+  const location = useLocation();
+  const isHome = location.pathname === "/";
+
   useEffect(() => {
     let active = true;
     async function loadNow() {
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch(`${API_BASE}/now`);
-        if (!active) {return;}
+        const res = await fetch(`${apiBase}/now`);
+        if (!active) return;
         if (res.status === 204) {
           setSnapshot(null);
           setServiceOpen(null);
@@ -39,10 +113,9 @@ export function App() {
         const json = await res.json();
         setSnapshot(json);
         setServiceOpen(json?.serviceOpen === false ? false : true);
-      } catch (err: unknown) {
-        if (!active) {return;}
-        const message = err instanceof Error ? err.message : "Failed to load snapshot";
-        setError(message);
+      } catch (err: any) {
+        if (!active) return;
+        setError(err?.message ?? "Failed to load snapshot");
         setServiceOpen(null);
       } finally {
         if (active) {
@@ -54,10 +127,13 @@ export function App() {
     return () => {
       active = false;
     };
-  }, [API_BASE, setSnapshot]);
+  }, [apiBase, setSnapshot, setServiceOpen, setError, setLoading]);
 
   useEffect(() => {
-    const es = new EventSource(`${API_BASE}/stream`);
+    if (!isHome) {
+      return;
+    }
+    const es = new EventSource(`${apiBase}/stream`);
     es.onmessage = (event) => {
       try {
         const json = JSON.parse(event.data);
@@ -74,7 +150,7 @@ export function App() {
     return () => {
       es.close();
     };
-  }, [API_BASE, setSnapshot]);
+  }, [isHome, apiBase, setSnapshot, setServiceOpen, setError]);
 
   useEffect(() => {
     if (!snapshot || serviceOpen === false) {
@@ -91,33 +167,7 @@ export function App() {
     return () => {
       window.clearInterval(id);
     };
-  }, [snapshot, serviceOpen]);
+  }, [snapshot, serviceOpen, setSinceText]);
 
-  const contextValue = useMemo(
-    () => ({
-      theme,
-      setTheme,
-      toggleTheme,
-      snapshot,
-      serviceOpen,
-      sinceText,
-      loading,
-      error,
-    }),
-    [theme, setTheme, toggleTheme, snapshot, serviceOpen, sinceText, loading, error]
-  );
-
-  return (
-    <ShellContext.Provider value={contextValue}>
-      <BrowserRouter>
-        <Routes>
-          <Route element={<Shell />}>
-            <Route index element={<Home />} />
-            <Route path="about" element={<About />} />
-            <Route path="line/:id" element={<LineView />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
-    </ShellContext.Provider>
-  );
+  return <>{children}</>;
 }
