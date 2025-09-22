@@ -158,22 +158,33 @@ export function LineView() {
           {lineOrder[ln].map((stationId) => {
             const station = stationById[stationId];
             const arrivals = stationLookup.get(stationId)?.arrivals ?? [];
-            // Get terminal stopIds for this line
-            const firstTerminal = lineOrder[ln][0];
-            const lastTerminal = lineOrder[ln][lineOrder[ln].length - 1];
-
-            // Find ETA for trains heading to first terminal
-            const etaToFirst = arrivals.find(a =>
-              a.destinoId !== undefined && destinos[a.destinoId]?.terminal === firstTerminal
-            );
-            // Find ETA for trains heading to last terminal
-            const etaToLast = arrivals.find(a =>
-              a.destinoId !== undefined && destinos[a.destinoId]?.terminal === lastTerminal
-            );
-
             const elapsed = Math.max(0, nowSec - (lineEtas?.t ?? 0));
-            const format = (a?: typeof etaToFirst) =>
-              a ? formatEta(Math.max(0, a.etaSeconds - elapsed)) : "--";
+
+            // Group arrivals by destinoId, keeping only the earliest ETA for each destination
+            const nextArrivalsByDestino: Record<string, typeof arrivals[0]> = {};
+            arrivals.forEach((a) => {
+              if (!a.destinoId) return;
+              if (!nextArrivalsByDestino[a.destinoId] || a.etaSeconds < nextArrivalsByDestino[a.destinoId].etaSeconds) {
+                nextArrivalsByDestino[a.destinoId] = a;
+              }
+            });
+
+            // Always show both directions (terminals) if available, otherwise show all destinations
+            const terminalIds = [lineOrder[ln][0], lineOrder[ln][lineOrder[ln].length - 1]];
+            const terminalDestinoIds = Object.entries(destinos)
+              .filter(([id, d]) => d?.terminal && terminalIds.includes(d.terminal))
+              .map(([id]) => id);
+
+            // If both terminal destinations are present, show them; otherwise show all available destinations
+            let displayDestinoIds: string[];
+            if (terminalDestinoIds.every(id => nextArrivalsByDestino[id])) {
+              displayDestinoIds = terminalDestinoIds;
+            } else {
+              displayDestinoIds = Object.keys(nextArrivalsByDestino);
+            }
+
+            // Sort by ETA ascending
+            displayDestinoIds.sort((a, b) => nextArrivalsByDestino[a].etaSeconds - nextArrivalsByDestino[b].etaSeconds);
 
             return (
               <li
@@ -189,8 +200,19 @@ export function LineView() {
                   <span>{station?.name ?? stationId}</span>
                 </div>
                 <div className="flex flex-col text-sm text-muted text-right">
-                  <span>{`${stationById[firstTerminal]?.name ?? firstTerminal}: ${format(etaToFirst)}`}</span>
-                  <span>{`${stationById[lastTerminal]?.name ?? lastTerminal}: ${format(etaToLast)}`}</span>
+                  {displayDestinoIds.length === 0 ? (
+                    <span>--</span>
+                  ) : (
+                    displayDestinoIds.map((destinoId) => {
+                      const destinoKey = String(destinoId);
+                      const a = nextArrivalsByDestino[destinoKey];
+                      return (
+                        <span key={destinoKey}>
+                          {`${destinos[destinoKey]?.name ?? destinoKey}: ${formatEta(Math.max(0, a.etaSeconds - elapsed))}`}
+                        </span>
+                      );
+                    })
+                  )}
                 </div>
               </li>
             );

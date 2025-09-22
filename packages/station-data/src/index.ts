@@ -78,22 +78,31 @@ export const lineOrder: Record<LineName, string[]> = {
 };
 
 // Map destino IDs to human names and inferred line + terminal stop_id
-export const destinos: Record<string, { name: string; line: LineName; terminal: string } | undefined> = {
-  // Verde terminals
-  "50": { name: "Telheiras", line: "verde", terminal: "TE" },
-  "54": { name: "Cais do Sodré", line: "verde", terminal: "CS" },
-
-  // Azul terminals
+export const destinos: Record<string, { name: string; line?: LineName; terminal?: string } | undefined> = {
   "33": { name: "Reboleira", line: "azul", terminal: "RB" },
+  "34": { name: "Amadora Este", line: "azul" },
+  "35": { name: "Pontinha", line: "azul" },
+  "36": { name: "Colégio Militar/Luz", line: "azul" },
+  "37": { name: "Laranjeiras", line: "azul" },
+  "38": { name: "São Sebastião", line: "vermelha", terminal: "SS" },
+  "39": { name: "Avenida", line: "azul" },
+  "40": { name: "Baixa-Chiado", line: "azul" },
+  "41": { name: "Terreiro do Paço", line: "azul", terminal: "TP" },
   "42": { name: "Santa Apolónia", line: "azul", terminal: "SP" },
-
-  // Amarela terminals
   "43": { name: "Odivelas", line: "amarela", terminal: "OD" },
+  "44": { name: "Lumiar", line: "amarela" },
+  "45": { name: "Campo Grande", line: "amarela" },
+  "46": { name: "Campo Pequeno", line: "amarela" },
   "48": { name: "Rato", line: "amarela", terminal: "RA" },
-
-  // Vermelha terminals
-  "60": { name: "Aeroporto", line: "vermelha", terminal: "AP" },
-  "38": { name: "São Sebastião", line: "vermelha", terminal: "SS" }
+  "50": { name: "Telheiras", line: "verde", terminal: "TE" },
+  "51": { name: "Alvalade", line: "verde" },
+  "52": { name: "Alameda", line: "verde" },
+  "53": { name: "Martim Moniz", line: "verde" },
+  "54": { name: "Cais do Sodré", line: "verde", terminal: "CS" },
+  "56": { name: "Bela Vista", line: "vermelha" },
+  "57": { name: "Chelas", line: "vermelha" },
+  "59": { name: "Moscavide", line: "vermelha" },
+  "60": { name: "Aeroporto", line: "vermelha", terminal: "AP" }
 };
 
 export function neighborForDirection(
