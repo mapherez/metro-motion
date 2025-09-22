@@ -1,11 +1,20 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import {
+  type Dispatch,
+  type ReactNode,
+  type SetStateAction,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState
+} from "react";
+import { BrowserRouter, Route, Routes, useLocation } from "react-router-dom";
 import { useSnapshotStore } from "./state";
 import { Shell } from "./Shell";
 import { Home } from "./views/Home";
 import { About } from "./views/About";
 import { LineView } from "./views/LineView";
 import { ShellContext, ThemeMode } from "./shell-context";
+import type { Snapshot } from "@metro/shared-types";
 
 const THEME_STORAGE_KEY = "metro-theme";
 
@@ -54,13 +63,79 @@ export function App() {
     }
   }, [theme]);
 
+  const contextValue = useMemo(
+    () => ({
+      theme,
+      setTheme,
+      toggleTheme,
+      snapshot,
+      serviceOpen,
+      sinceText,
+      loading,
+      error,
+    }),
+    [theme, snapshot, serviceOpen, sinceText, loading, error, toggleTheme]
+  );
+
+  return (
+    <ShellContext.Provider value={contextValue}>
+      <BrowserRouter>
+        <SnapshotSync
+          apiBase={API_BASE}
+          setSnapshot={setSnapshot}
+          setServiceOpen={setServiceOpen}
+          setError={setError}
+          setLoading={setLoading}
+          snapshot={snapshot}
+          serviceOpen={serviceOpen}
+          setSinceText={setSinceText}
+        >
+          <Routes>
+            <Route element={<Shell />}>
+              <Route index element={<Home />} />
+              <Route path="about" element={<About />} />
+              <Route path="line/:id" element={<LineView />} />
+            </Route>
+          </Routes>
+        </SnapshotSync>
+      </BrowserRouter>
+    </ShellContext.Provider>
+  );
+}
+
+type SnapshotSyncProps = {
+  apiBase: string;
+  setSnapshot: (snapshot: Snapshot | null) => void;
+  setServiceOpen: Dispatch<SetStateAction<boolean | null>>;
+  setError: Dispatch<SetStateAction<string | null>>;
+  setLoading: Dispatch<SetStateAction<boolean>>;
+  snapshot: Snapshot | null;
+  serviceOpen: boolean | null;
+  setSinceText: Dispatch<SetStateAction<string>>;
+  children: ReactNode;
+};
+
+function SnapshotSync({
+  apiBase,
+  setSnapshot,
+  setServiceOpen,
+  setError,
+  setLoading,
+  snapshot,
+  serviceOpen,
+  setSinceText,
+  children
+}: SnapshotSyncProps) {
+  const location = useLocation();
+  const isHome = location.pathname === "/";
+
   useEffect(() => {
     let active = true;
     async function loadNow() {
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch(`${API_BASE}/now`);
+        const res = await fetch(`${apiBase}/now`);
         if (!active) return;
         if (res.status === 204) {
           setSnapshot(null);
@@ -87,10 +162,13 @@ export function App() {
     return () => {
       active = false;
     };
-  }, [API_BASE, setSnapshot, setServiceOpen]);
+  }, [apiBase, setSnapshot, setServiceOpen, setError, setLoading]);
 
   useEffect(() => {
-    const es = new EventSource(`${API_BASE}/stream`);
+    if (!isHome) {
+      return;
+    }
+    const es = new EventSource(`${apiBase}/stream`);
     es.onmessage = (event) => {
       try {
         const json = JSON.parse(event.data);
@@ -107,7 +185,7 @@ export function App() {
     return () => {
       es.close();
     };
-  }, [API_BASE, setSnapshot, setServiceOpen]);
+  }, [isHome, apiBase, setSnapshot, setServiceOpen, setError]);
 
   useEffect(() => {
     if (!snapshot || serviceOpen === false) {
@@ -124,33 +202,7 @@ export function App() {
     return () => {
       window.clearInterval(id);
     };
-  }, [snapshot, serviceOpen]);
+  }, [snapshot, serviceOpen, setSinceText]);
 
-  const contextValue = useMemo(
-    () => ({
-      theme,
-      setTheme,
-      toggleTheme,
-      snapshot,
-      serviceOpen,
-      sinceText,
-      loading,
-      error,
-    }),
-    [theme, snapshot, serviceOpen, sinceText, loading, error, toggleTheme]
-  );
-
-  return (
-    <ShellContext.Provider value={contextValue}>
-      <BrowserRouter>
-        <Routes>
-          <Route element={<Shell />}>
-            <Route index element={<Home />} />
-            <Route path="about" element={<About />} />
-            <Route path="line/:id" element={<LineView />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
-    </ShellContext.Provider>
-  );
+  return <>{children}</>;
 }
