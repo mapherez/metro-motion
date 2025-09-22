@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { lineNames, lineOrder } from "@metro/station-data";
+import { destinos, lineNames, lineOrder } from "@metro/station-data";
 import type { LineName } from "@metro/station-data";
 import { stationById } from "@metro/station-data/stations";
 import type { StationEta } from "@metro/shared-types";
@@ -132,19 +132,6 @@ export function LineView() {
     return map;
   }, [lineEtas]);
 
-  const nextEta = useCallback(
-    (stopId: string) => {
-      if (!lineEtas) return "--";
-      const station = stationLookup.get(stopId);
-      const first = station?.arrivals?.[0];
-      if (!first) return "--";
-      const elapsed = Math.max(0, nowSec - lineEtas.t);
-      const remaining = Math.max(0, first.etaSeconds - elapsed);
-      return formatEta(remaining);
-    },
-    [lineEtas, stationLookup, nowSec]
-  );
-
   return (
     <div className="flex flex-col">
       <header className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-white/10 bg-[var(--bg)]/90 px-4 py-3 backdrop-blur">
@@ -170,6 +157,24 @@ export function LineView() {
         <ol className="space-y-3">
           {lineOrder[ln].map((stationId) => {
             const station = stationById[stationId];
+            const arrivals = stationLookup.get(stationId)?.arrivals ?? [];
+            // Get terminal stopIds for this line
+            const firstTerminal = lineOrder[ln][0];
+            const lastTerminal = lineOrder[ln][lineOrder[ln].length - 1];
+
+            // Find ETA for trains heading to first terminal
+            const etaToFirst = arrivals.find(a =>
+              a.destinoId !== undefined && destinos[a.destinoId]?.terminal === firstTerminal
+            );
+            // Find ETA for trains heading to last terminal
+            const etaToLast = arrivals.find(a =>
+              a.destinoId !== undefined && destinos[a.destinoId]?.terminal === lastTerminal
+            );
+
+            const elapsed = Math.max(0, nowSec - (lineEtas?.t ?? 0));
+            const format = (a?: typeof etaToFirst) =>
+              a ? formatEta(Math.max(0, a.etaSeconds - elapsed)) : "--";
+
             return (
               <li
                 key={stationId}
@@ -183,7 +188,10 @@ export function LineView() {
                   />
                   <span>{station?.name ?? stationId}</span>
                 </div>
-                <span className="text-sm text-muted">{nextEta(stationId)}</span>
+                <div className="flex flex-col text-sm text-muted text-right">
+                  <span>{`${stationById[firstTerminal]?.name ?? firstTerminal}: ${format(etaToFirst)}`}</span>
+                  <span>{`${stationById[lastTerminal]?.name ?? lastTerminal}: ${format(etaToLast)}`}</span>
+                </div>
               </li>
             );
           })}

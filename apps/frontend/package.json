@@ -11,6 +11,7 @@
     "lint": "echo 'no lint configured'"
   },
   "dependencies": {
+    "@heroicons/react": "^2.2.0",
     "@metro/shared-types": "workspace:*",
     "@metro/station-data": "workspace:*",
     "react": "^18.3.1",
