@@ -4,6 +4,7 @@ import { lineNames, lineOrder } from "@metro/station-data";
 import type { LineName } from "@metro/station-data";
 import { stationById } from "@metro/station-data/stations";
 import type { StationEta } from "@metro/shared-types";
+import { useShellContext } from "../shell-context";
 
 const LABEL_BY_LINE: Record<LineName, string> = {
   azul: "Azul",
@@ -16,6 +17,7 @@ const focusRing =
   "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]";
 
 const REFRESH_INTERVAL_MS = 6000;
+const CLOSED_REFRESH_INTERVAL_MS = 60000;
 
 function normalizeLineName(id: string | undefined): LineName {
   if (!id) return "azul";
@@ -41,6 +43,7 @@ export function LineView() {
   const params = useParams();
   const ln = normalizeLineName(params.id);
   const API_BASE = import.meta.env.DEV ? "/api" : import.meta.env.VITE_API_BASE;
+  const { serviceOpen } = useShellContext();
 
   const [lineEtas, setLineEtas] = useState<LineEtaResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -61,8 +64,25 @@ export function LineView() {
     let timer: number | undefined;
     let isFirstFetch = true;
 
-    const fetchEtas = async () => {
+    const schedule = (delay: number) => {
       if (!active) return;
+      timer = window.setTimeout(fetchEtas, delay);
+    };
+
+    const fetchEtas = async () => {
+      let nextDelay = REFRESH_INTERVAL_MS;
+      if (!active) return;
+      if (serviceOpen === false) {
+        setLineEtas(null);
+        setError(null);
+        if (isFirstFetch) {
+          setLoading(false);
+          isFirstFetch = false;
+        }
+        nextDelay = CLOSED_REFRESH_INTERVAL_MS;
+        schedule(nextDelay);
+        return;
+      }
       try {
         if (isFirstFetch) {
           setLoading(true);
@@ -88,7 +108,7 @@ export function LineView() {
           setLoading(false);
           isFirstFetch = false;
         }
-        timer = window.setTimeout(fetchEtas, REFRESH_INTERVAL_MS);
+        schedule(nextDelay);
       }
     };
 
@@ -100,7 +120,7 @@ export function LineView() {
         window.clearTimeout(timer);
       }
     };
-  }, [API_BASE, ln]);
+  }, [API_BASE, ln, serviceOpen]);
 
   const stationLookup = useMemo(() => {
     const map = new Map<string, StationEta>();
@@ -144,24 +164,27 @@ export function LineView() {
         {error ? (
           <p className="text-sm text-[var(--alert-error)]">{error}</p>
         ) : null}
+        {serviceOpen === false ? (
+          <p className="text-sm text-muted">Serviço encerrado (01:00 – 06:30)</p>
+        ) : null}
         <ol className="space-y-3">
           {lineOrder[ln].map((stationId) => {
             const station = stationById[stationId];
             return (
               <li
                 key={stationId}
-              className="flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-[var(--bg-soft)] px-4 py-3"
-            >
-              <div className="flex items-center gap-3">
-                <span
-                  aria-hidden
-                  className="inline-block h-3 w-3 rounded-full"
-                  style={{ background: `var(--line-${ln})` }}
-                />
-                <span>{station?.name ?? stationId}</span>
-              </div>
-              <span className="text-sm text-muted">{nextEta(stationId)}</span>
-            </li>
+                className="flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-[var(--bg-soft)] px-4 py-3"
+              >
+                <div className="flex items-center gap-3">
+                  <span
+                    aria-hidden
+                    className="inline-block h-3 w-3 rounded-full"
+                    style={{ background: `var(--line-${ln})` }}
+                  />
+                  <span>{station?.name ?? stationId}</span>
+                </div>
+                <span className="text-sm text-muted">{nextEta(stationId)}</span>
+              </li>
             );
           })}
         </ol>
