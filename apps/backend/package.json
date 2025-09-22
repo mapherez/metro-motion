@@ -14,8 +14,8 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@fastify/cors": "^10.0.0",
-    "@fastify/static": "^7.0.2",
+    "@fastify/cors": "^10.1.0",
+    "@fastify/static": "^8.2.0",
     "@metro/shared-types": "workspace:*",
     "@metro/shared-utils": "workspace:*",
     "@metro/station-data": "workspace:*",
