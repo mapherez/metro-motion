@@ -1,17 +1,38 @@
-﻿import { deepMerge } from "./deep-merge.js";
+﻿import { fileURLToPath, URL } from "node:url";
+import { readFileSync, readdirSync } from "node:fs";
+import { join, resolve } from "node:path";
+
+import { deepMerge } from "./deep-merge.js";
 import { cloneJson, isJsonObject } from "./json.js";
 
 import type { JsonObject, JsonValue} from "./json.js";
 
-const THEME_MODULES = import.meta.glob("../../config/themes/*.json", {
-  eager: true,
-  import: "default"
-}) as Record<string, ThemeDefinition>;
+const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
-const APP_THEME_CONFIGS = import.meta.glob("../../apps/*/theme.config.json", {
-  eager: true,
-  import: "default"
-}) as Record<string, ThemeConfig>;
+// Load theme modules - themes are at workspace root
+const themesDir = resolve(__dirname, "../../../../config/themes");
+const THEME_MODULES: Record<string, ThemeDefinition> = {};
+
+readdirSync(themesDir)
+  .filter((file: string) => file.endsWith(".json"))
+  .forEach((file: string) => {
+    const fullPath = join(themesDir, file);
+    THEME_MODULES[fullPath] = JSON.parse(readFileSync(fullPath, "utf-8"));
+  });
+
+// Load app theme configs - apps are at workspace root
+const appsDir = resolve(__dirname, "../../../../apps");
+const APP_THEME_CONFIGS: Record<string, ThemeConfig> = {};
+
+readdirSync(appsDir)
+  .forEach((app: string) => {
+    const configPath = join(appsDir, app, "theme.config.json");
+    try {
+      APP_THEME_CONFIGS[configPath] = JSON.parse(readFileSync(configPath, "utf-8"));
+    } catch (err) {
+      // Skip if theme.config.json doesn't exist
+    }
+  });
 
 export type ThemeDefinition = {
   name: string;

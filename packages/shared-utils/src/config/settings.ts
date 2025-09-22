@@ -1,16 +1,38 @@
+import { fileURLToPath, URL } from "node:url";
+import { readFileSync, readdirSync } from "node:fs";
+import { join, resolve } from "node:path";
+
 import { deepMerge, mergeMany } from "./deep-merge.js";
 
 import type { JsonObject } from "./json.js";
 
-const GLOBAL_SETTINGS = import.meta.glob("../../config/settings/*.json", {
-  eager: true,
-  import: "default"
-}) as Record<string, JsonObject>;
+const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
-const APP_SETTINGS = import.meta.glob("../../apps/*/app.config.json", {
-  eager: true,
-  import: "default"
-}) as Record<string, JsonObject>;
+// Load global settings - config is at workspace root, not relative to this package
+const settingsDir = resolve(__dirname, "../../../../config/settings");
+const GLOBAL_SETTINGS: Record<string, JsonObject> = {};
+
+readdirSync(settingsDir)
+  .filter((file: string) => file.endsWith(".json"))
+  .forEach((file: string) => {
+    const fullPath = join(settingsDir, file);
+    // Use dynamic import for JSON files
+    GLOBAL_SETTINGS[fullPath] = JSON.parse(readFileSync(fullPath, "utf-8"));
+  });
+
+// Load app settings - apps are at workspace root, not relative to this package
+const appsDir = resolve(__dirname, "../../../../apps");
+const APP_SETTINGS: Record<string, JsonObject> = {};
+
+readdirSync(appsDir)
+  .forEach((app: string) => {
+    const configPath = join(appsDir, app, "app.config.json");
+    try {
+      APP_SETTINGS[configPath] = JSON.parse(readFileSync(configPath, "utf-8"));
+    } catch (err) {
+      // Skip if app.config.json doesn't exist
+    }
+  });
 
 export type FeatureFlags = Record<string, boolean>;
 

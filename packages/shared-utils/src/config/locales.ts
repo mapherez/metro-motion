@@ -1,3 +1,7 @@
+import { fileURLToPath, URL } from "node:url";
+import { readFileSync, readdirSync } from "node:fs";
+import { join, resolve } from "node:path";
+
 import { IntlMessageFormat } from "intl-messageformat";
 
 import { deepMerge } from "./deep-merge.js";
@@ -5,15 +9,63 @@ import { cloneJson, isJsonObject } from "./json.js";
 
 import type { JsonObject, JsonValue} from "./json.js";
 
-const GLOBAL_LOCALES = import.meta.glob("../../locales/*/*.json", {
-  eager: true,
-  import: "default"
-}) as Record<string, JsonObject>;
+const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
-const APP_LOCALES = import.meta.glob("../../apps/*/locales/*/*.json", {
-  eager: true,
-  import: "default"
-}) as Record<string, JsonObject>;
+// Load global locales - locales are at workspace root
+const localesDir = resolve(__dirname, "../../../../locales");
+const GLOBAL_LOCALES: Record<string, JsonObject> = {};
+
+try {
+  readdirSync(localesDir)
+    .forEach((locale: string) => {
+      const localeDir = join(localesDir, locale);
+      try {
+        readdirSync(localeDir)
+          .filter((file: string) => file.endsWith(".json"))
+          .forEach((file: string) => {
+            const fullPath = join(localeDir, file);
+            const key = `../../locales/${locale}/${file}`;
+            GLOBAL_LOCALES[key] = JSON.parse(readFileSync(fullPath, "utf-8"));
+          });
+      } catch (err) {
+        // Skip if locale directory doesn't exist
+      }
+    });
+} catch (err) {
+  // Skip if locales directory doesn't exist
+}
+
+// Load app locales - apps are at workspace root
+const appsDir = resolve(__dirname, "../../../../apps");
+const APP_LOCALES: Record<string, JsonObject> = {};
+
+try {
+  readdirSync(appsDir)
+    .forEach((app: string) => {
+      const appLocalesDir = join(appsDir, app, "locales");
+      try {
+        readdirSync(appLocalesDir)
+          .forEach((locale: string) => {
+            const localeDir = join(appLocalesDir, locale);
+            try {
+              readdirSync(localeDir)
+                .filter((file: string) => file.endsWith(".json"))
+                .forEach((file: string) => {
+                  const fullPath = join(localeDir, file);
+                  const key = `../../apps/${app}/locales/${locale}/${file}`;
+                  APP_LOCALES[key] = JSON.parse(readFileSync(fullPath, "utf-8"));
+                });
+            } catch (err) {
+              // Skip if locale directory doesn't exist
+            }
+          });
+      } catch (err) {
+        // Skip if app locales directory doesn't exist
+      }
+    });
+} catch (err) {
+  // Skip if apps directory doesn't exist
+}
 
 export type LocaleBundle = Record<string, JsonObject>;
 export type Translator = (key: string, values?: Record<string, unknown>) => string;
