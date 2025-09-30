@@ -48,7 +48,8 @@ export class Ingestor {
   private timer?: NodeJS.Timeout;
   private backoffMs = 0;
   private redis = createRedis();
-  private prevState = new Map<string, { to: string; segmentStartEta: number; t: number }>();
+  private prevState = new Map<string, { to: string; segmentStartEta: number; t: number; lastEta: number }>();
+  private stationStates = new Map<string, { lastHora: string }>();
   private lastSnapshot?: Snapshot;
   private lastStationEtas?: StationEtaSnapshot;
   private lastPublishAt = 0;
@@ -224,7 +225,7 @@ export class Ingestor {
           }
           snapshot = { ...parsed.data, serviceOpen: true };
         } else {
-          const trains = normalizeTempoEspera(data, this.prevState, config.dwellSeconds);
+          const trains = normalizeTempoEspera(data, this.prevState, this.stationStates, config.dwellSeconds);
           snapshot = toSnapshot(trains);
         }
         // Debug: counts (derive from snapshot to support both branches)

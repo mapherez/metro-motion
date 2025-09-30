@@ -28,6 +28,11 @@ export type TrainState = {
   to: string;
   segmentStartEta: number; // seconds when this segment observed
   t: number; // epoch seconds last seen
+  lastEta: number;
+};
+
+export type StationState = {
+  lastHora: string;
 };
 
 export type InferredTrain = {
@@ -57,6 +62,7 @@ function lineFromTrainId(trainId: string | undefined): LineName | undefined {
 export function normalizeTempoEspera(
   data: TempoEsperaResponse,
   prev: Map<string, TrainState>,
+  stationStates: Map<string, StationState>,
   dwellSeconds: number
 ): InferredTrain[] {
   const rows: any = (data as any)?.resposta;
@@ -125,7 +131,7 @@ export function normalizeTempoEspera(
     if (progress01 > 1) progress01 = 1;
 
     result.push({ id: trainId, line, from, to, etaNext, progress01, dest: destName });
-    prev.set(trainId, { to, segmentStartEta, t: now });
+    prev.set(trainId, { to, segmentStartEta, t: now, lastEta: etaNext });
   }
 
   return result;
