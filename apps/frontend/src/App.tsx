@@ -7,7 +7,8 @@ import {
   useMemo,
   useState
 } from "react";
-import { BrowserRouter, Route, Routes, useLocation } from "react-router-dom";
+import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { API_BASE, STALE_AFTER_SECONDS } from "./api";
 import { useSnapshotStore } from "./state";
 import { Shell } from "./Shell";
 import { Home } from "./views/Home";
@@ -38,7 +39,6 @@ function applyTheme(mode: ThemeMode) {
 }
 
 export function App() {
-  const API_BASE = import.meta.env.DEV ? "/api" : import.meta.env.VITE_API_BASE;
   const snapshot = useSnapshotStore((s) => s.snapshot);
   const setSnapshot = useSnapshotStore((s) => s.setSnapshot);
 
@@ -126,16 +126,14 @@ function SnapshotSync({
   setSinceText,
   children
 }: SnapshotSyncProps) {
-  const location = useLocation();
-  const isHome = location.pathname === "/";
-
   useEffect(() => {
     let active = true;
+    const controller = new AbortController();
     async function loadNow() {
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch(`${apiBase}/now`);
+        const res = await fetch(`${apiBase}/now`, { signal: controller.signal });
         if (!active) return;
         if (res.status === 204) {
           setSnapshot(null);
@@ -161,13 +159,11 @@ function SnapshotSync({
     loadNow();
     return () => {
       active = false;
+      controller.abort();
     };
   }, [apiBase, setSnapshot, setServiceOpen, setError, setLoading]);
 
   useEffect(() => {
-    if (!isHome) {
-      return;
-    }
     const es = new EventSource(`${apiBase}/stream`);
     es.onmessage = (event) => {
       try {
@@ -185,7 +181,7 @@ function SnapshotSync({
     return () => {
       es.close();
     };
-  }, [isHome, apiBase, setSnapshot, setServiceOpen, setError]);
+  }, [apiBase, setSnapshot, setServiceOpen, setError]);
 
   useEffect(() => {
     if (!snapshot || serviceOpen === false) {
@@ -195,7 +191,7 @@ function SnapshotSync({
     const update = () => {
       const ageMs = Date.now() - snapshot.t * 1000;
       const seconds = Math.max(0, Math.floor(ageMs / 1000));
-      setSinceText(seconds === 1 ? "1s ago" : `${seconds}s ago`);
+      setSinceText(seconds > STALE_AFTER_SECONDS ? `${seconds}s — dados desatualizados` : `${seconds}s ago`);
     };
     update();
     const id = window.setInterval(update, 1000);

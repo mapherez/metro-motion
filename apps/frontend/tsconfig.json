@@ -9,6 +9,7 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
+    "tsBuildInfoFile": "./node_modules/.cache/frontend.tsbuildinfo",
     "jsx": "react-jsx",
     "strict": true
   },

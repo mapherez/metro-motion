@@ -5,5 +5,12 @@ dist
 **/dist
 .env
 .env.*
-Dockerfile
-infra/docker/*.Dockerfile
+_examples
+.turbo
+.pnpm-store
+**/.turbo
+**/.cache
+output
+.test-artifacts
+**/*.tsbuildinfo
+**/*.log

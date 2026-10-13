@@ -5,6 +5,7 @@ node_modules/
 dist/
 build/
 coverage/
+*.tsbuildinfo
 .nyc_output/
 
 # Logs
@@ -27,6 +28,9 @@ _examples/
 Thumbs.db
 .idea/
 .vscode/
+.test-artifacts/
+output/playwright/
+.playwright-cli/
 
 # Frameworks (possible future frontend)
 .next/

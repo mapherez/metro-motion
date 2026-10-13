@@ -5,6 +5,7 @@ import type { LineName } from "@metro/station-data";
 import { stationById } from "@metro/station-data/stations";
 import type { StationEta } from "@metro/shared-types";
 import { useShellContext } from "../shell-context";
+import { API_BASE, STALE_AFTER_SECONDS } from "../api";
 
 const LABEL_BY_LINE: Record<LineName, string> = {
   azul: "Azul",
@@ -42,7 +43,6 @@ function formatEta(seconds: number): string {
 export function LineView() {
   const params = useParams();
   const ln = normalizeLineName(params.id);
-  const API_BASE = import.meta.env.DEV ? "/api" : import.meta.env.VITE_API_BASE;
   const { serviceOpen } = useShellContext();
 
   const [lineEtas, setLineEtas] = useState<LineEtaResponse | null>(null);
@@ -61,6 +61,7 @@ export function LineView() {
 
   useEffect(() => {
     let active = true;
+    const controller = new AbortController();
     let timer: number | undefined;
     let isFirstFetch = true;
 
@@ -88,7 +89,7 @@ export function LineView() {
           setLoading(true);
         }
         setError(null);
-        const res = await fetch(`${API_BASE}/lines/${ln}/etas`);
+        const res = await fetch(`${API_BASE}/lines/${ln}/etas`, { signal: controller.signal });
         if (!active) return;
         if (res.status === 204) {
           setLineEtas(null);
@@ -116,11 +117,12 @@ export function LineView() {
 
     return () => {
       active = false;
+      controller.abort();
       if (timer !== undefined) {
         window.clearTimeout(timer);
       }
     };
-  }, [API_BASE, ln, serviceOpen]);
+  }, [ln, serviceOpen]);
 
   const stationLookup = useMemo(() => {
     const map = new Map<string, StationEta>();
@@ -151,13 +153,17 @@ export function LineView() {
         {error ? (
           <p className="text-sm text-[var(--alert-error)]">{error}</p>
         ) : null}
+        {lineEtas && nowSec - lineEtas.t > STALE_AFTER_SECONDS ? (
+          <p className="text-sm text-[var(--alert)]">Dados desatualizados — a aguardar atualização.</p>
+        ) : null}
         {serviceOpen === false ? (
           <p className="text-sm text-muted">Serviço encerrado (01:00 – 06:30)</p>
         ) : null}
         <ol className="space-y-3">
           {lineOrder[ln].map((stationId) => {
             const station = stationById[stationId];
-            const arrivals = stationLookup.get(stationId)?.arrivals ?? [];
+            const arrivals = lineEtas && nowSec - lineEtas.t <= STALE_AFTER_SECONDS
+              ? stationLookup.get(stationId)?.arrivals ?? [] : [];
             const elapsed = Math.max(0, nowSec - (lineEtas?.t ?? 0));
 
             // Group arrivals by destinoId, keeping only the earliest ETA for each destination

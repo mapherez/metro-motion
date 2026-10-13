@@ -4,8 +4,8 @@ import tailwindcss from "@tailwindcss/vite";
 import { qrcode } from "vite-plugin-qrcode";
 
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd());
-  const backend = env.VITE_API_BASE || "http://localhost:8080";
+  const env = loadEnv(mode, process.cwd(), "BACKEND_");
+  const backend = env.BACKEND_PROXY_TARGET || "http://localhost:8080";
 
   return {
     plugins: [react(), tailwindcss(), qrcode()] as PluginOption[],
@@ -17,7 +17,6 @@ export default defineConfig(({ mode }) => {
         "/api": {
           target: backend,
           changeOrigin: true,
-          rewrite: (p) => p.replace(/^\/api\//, "/"),
           headers: { "X-Dev-Proxy": "vite" },
         },
       },

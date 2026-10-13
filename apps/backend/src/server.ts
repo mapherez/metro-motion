@@ -1,210 +1,95 @@
 import Fastify from 'fastify';
-import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { existsSync, readFileSync } from 'node:fs';
-import { config } from './config.js';
-import { Snapshot as SnapshotSchema, StationEtaSnapshot as StationEtaSnapshotSchema, LineNameEnum } from '@metro/shared-types';
-import { createRedis } from './redis.js';
+import { Snapshot, StationEtaSnapshot, LineNameEnum } from '@metro/shared-types';
+import type { Config } from './config.js';
+import { createRedis, closeRedis, type RedisClient } from './redis.js';
+import { SnapshotStream } from './sse.js';
 
-export function buildServer() {
-  const app = Fastify({ logger: true });
-  const redis = createRedis();
+export function buildServer(config: Config, options: { redis?: RedisClient; logger?: boolean } = {}) {
+  const indexPath = path.join(config.frontendDist, 'index.html');
+  if (config.production && !existsSync(indexPath)) throw new Error('Frontend build missing: FRONTEND_DIST_DIR must contain index.html');
+  const app = Fastify({ logger: options.logger ?? true });
+  const redis = options.redis || createRedis(config);
+  redis.on('error', () => app.log.warn('Redis unavailable; reconnecting'));
+  const stream = new SnapshotStream(redis, config.redis.channel, app.log);
 
-  // CORS
-  app.register(cors, {
-    origin: config.corsOrigin
-  });
-
-  const __filename = fileURLToPath(import.meta.url);
-  const __dirname = path.dirname(__filename);
-  const defaultFrontendDist = path.resolve(__dirname, '../../frontend/dist');
-  const frontendCandidates = [config.frontend.distDir, defaultFrontendDist].filter(Boolean) as string[];
-  const frontendDir = frontendCandidates.find((dir) => existsSync(dir));
-
-  if (frontendDir) {
-    app.log.info({ frontendDir }, 'Serving frontend assets');
-    app.register(fastifyStatic, {
-      root: frontendDir,
-      prefix: '/',
-      index: false,
-      wildcard: false
-    });
-
-    const indexPath = path.join(frontendDir, 'index.html');
-    const indexHtml = existsSync(indexPath) ? readFileSync(indexPath, 'utf8') : undefined;
-
-    if (indexHtml) {
-      const apiPrefixes = ['/healthz', '/now', '/lines', '/stream'];
-      app.get('/*', (req, reply) => {
-        const url = req.raw.url || '';
-        if (apiPrefixes.some((prefix) => url.startsWith(prefix))) {
-          return reply.code(404).send({ error: 'Not found' });
-        }
-        reply.type('text/html').send(indexHtml);
-      });
-
-      app.setNotFoundHandler((req, reply) => {
-        const accept = req.headers['accept'];
-        const wantsHtml = typeof accept === 'string' && accept.includes('text/html');
-        if (req.method === 'GET' && wantsHtml) {
-          reply.type('text/html').send(indexHtml);
-          return;
-        }
-        reply.code(404).send({ error: 'Not found' });
-      });
-    }
-  } else {
-    app.log.warn('Frontend dist directory not found, SPA routes will return 404');
-  }
-
-  // Routes
+  app.addHook('preClose', async () => { await stream.close(); });
+  app.addHook('onClose', async () => { await closeRedis(redis); });
   app.get('/healthz', async () => ({ ok: true }));
-
-  // Placeholder: will read from Redis in task 3
-  app.get('/now', async (_req, reply) => {
+  app.get('/readyz', async (_req, reply) => {
     try {
-      if (!config.redis.url) {
-        return reply.code(204).send();
-      }
-      const raw = await (redis as any).get(config.redis.snapshotKey);
-      if (!raw) {
-        return reply.code(204).send();
-      }
-      let json: unknown;
-      try {
-        json = JSON.parse(raw);
-      } catch (e) {
-        app.log.error({ err: e }, 'Invalid snapshot JSON in Redis');
-        return reply.code(500).send({ error: 'Invalid snapshot JSON' });
-      }
-      const parsed = SnapshotSchema.safeParse(json);
-      if (!parsed.success) {
-        app.log.error({ issues: parsed.error.issues }, 'Snapshot validation failed');
-        return reply.code(500).send({ error: 'Invalid snapshot schema' });
-      }
-      return parsed.data;
-    } catch (err) {
-      app.log.error({ err }, 'Error handling /now');
-      return reply.code(500).send({ error: 'Internal error' });
+      await redis.ping();
+      return { ok: true };
+    } catch {
+      return reply.code(503).send({ ok: false });
     }
   });
 
-  app.get('/lines/:lineId/etas', async (req, reply) => {
-    const params = req.params as { lineId?: string };
-    const lineIdRaw = params.lineId?.toLowerCase();
-    const parsedLine = LineNameEnum.safeParse(lineIdRaw);
-    if (!parsedLine.success) {
-      return reply.code(404).send({ error: 'Unknown line' });
-    }
-    const lineId = parsedLine.data;
-
+  app.get('/api/now', async (_req, reply) => {
+    let raw: string | null;
+    try { raw = await redis.get(config.redis.snapshotKey); }
+    catch { return reply.code(503).send({ error: 'Redis unavailable' }); }
+    if (!raw) return reply.code(204).send();
     try {
-      if (!config.redis.url) {
-        return reply.code(204).send();
-      }
-      const raw = await (redis as any).get(config.redis.stationEtaKey);
-      if (!raw) {
-        return reply.code(204).send();
-      }
-      let json: unknown;
-      try {
-        json = JSON.parse(raw);
-      } catch (e) {
-        app.log.error({ err: e }, 'Invalid station ETA JSON in Redis');
-        return reply.code(500).send({ error: 'Invalid station ETA JSON' });
-      }
-      const parsed = StationEtaSnapshotSchema.safeParse(json);
-      if (!parsed.success) {
-        app.log.error({ issues: parsed.error.issues }, 'Station ETA snapshot validation failed');
-        return reply.code(500).send({ error: 'Invalid station ETA schema' });
-      }
-      const lineData = parsed.data.lines[lineId as keyof typeof parsed.data.lines];
-      if (!lineData) {
-        return reply.code(204).send();
-      }
-      return {
-        line: lineId,
-        t: parsed.data.t,
-        stations: lineData.stations
-      };
-    } catch (err) {
-      app.log.error({ err }, 'Error handling /lines/:lineId/etas');
-      return reply.code(500).send({ error: 'Internal error' });
+      return reply.header('Cache-Control', 'no-store').send(Snapshot.parse(JSON.parse(raw)));
+    } catch {
+      app.log.error('Invalid snapshot in Redis');
+      return reply.code(500).send({ error: 'Invalid snapshot' });
     }
   });
 
-  // Placeholder: SSE stream, will be implemented in task 4
-  app.get('/stream', async (req, reply) => {
-    if (!config.redis.url) {
-      return reply.code(503).send({ error: 'SSE unavailable: Redis not configured' });
+  app.get<{ Params: { lineId: string } }>('/api/lines/:lineId/etas', async (req, reply) => {
+    const line = LineNameEnum.safeParse(req.params.lineId.toLowerCase());
+    if (!line.success) return reply.code(404).send({ error: 'Unknown line' });
+    let raw: string | null;
+    try { raw = await redis.get(config.redis.stationEtaKey); }
+    catch { return reply.code(503).send({ error: 'Redis unavailable' }); }
+    if (!raw) return reply.code(204).send();
+    try {
+      const data = StationEtaSnapshot.parse(JSON.parse(raw));
+      return reply.header('Cache-Control', 'no-store').send({ line: line.data, t: data.t, stations: data.lines[line.data].stations });
+    } catch {
+      app.log.error('Invalid station ETAs in Redis');
+      return reply.code(500).send({ error: 'Invalid station ETAs' });
     }
+  });
 
-    // Prepare SSE headers
-    reply.raw.setHeader('Access-Control-Allow-Origin', config.corsOrigin);
-    reply.raw.setHeader('Content-Type', 'text/event-stream');
-    reply.raw.setHeader('Cache-Control', 'no-cache, no-transform');
-    reply.raw.setHeader('Connection', 'keep-alive');
-    reply.raw.flushHeaders?.();
+  app.get('/api/stream', async (_req, reply) => {
+    let snapshot: unknown = null;
+    try {
+      await redis.ping();
+      if (!stream.ready) return reply.code(503).send({ error: 'SSE unavailable' });
+      const raw = await redis.get(config.redis.snapshotKey);
+      if (raw) snapshot = Snapshot.parse(JSON.parse(raw));
+    } catch {
+      return reply.code(503).send({ error: 'SSE unavailable' });
+    }
+    if (!stream.ready) return reply.code(503).send({ error: 'SSE unavailable' });
     reply.hijack();
-
-    const send = (payload: any) => {
-      try {
-        reply.raw.write(`data: ${JSON.stringify(payload)}\n\n`);
-      } catch (e) {
-        app.log.warn({ err: e }, 'SSE write failed');
-      }
-    };
-
-    // Heartbeat every ~20s to keep connection alive
-    const heartbeat = setInterval(() => {
-      try {
-        reply.raw.write(`: ping ${Date.now()}\n\n`);
-      } catch {}
-    }, 20000);
-
-    // Subscribe to Redis channel
-    const sub = await (redis as any).duplicate();
-    await sub.subscribe(config.redis.channel);
-    const onMessage = (_channel: string, message: string) => {
-      try {
-        const json = JSON.parse(message);
-        send(json);
-      } catch {
-        // send raw if not JSON
-        send(message);
-      }
-    };
-    sub.on('message', onMessage);
-
-    // Send last snapshot immediately if present
-    try {
-      const raw = await (redis as any).get(config.redis.snapshotKey);
-      if (raw) {
-        try {
-          send(JSON.parse(raw));
-        } catch {
-          send(raw);
-        }
-      }
-    } catch {}
-
-    const close = async () => {
-      clearInterval(heartbeat);
-      try {
-        sub.off('message', onMessage);
-        await sub.unsubscribe(config.redis.channel);
-        if (typeof sub.quit === 'function') await sub.quit();
-      } catch {}
-      try {
-        reply.raw.end();
-      } catch {}
-    };
-
-    req.raw.on('close', close);
-    req.raw.on('error', close);
+    reply.raw.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no'
+    });
+    stream.add(reply.raw, snapshot);
   });
 
+  if (existsSync(indexPath)) {
+    const indexHtml = readFileSync(indexPath, 'utf8');
+    app.register(fastifyStatic, { root: config.frontendDist, wildcard: false, index: false });
+    app.get('/', async (_req, reply) => reply.type('text/html').header('Cache-Control', 'no-cache').send(indexHtml));
+    app.setNotFoundHandler((req, reply) => {
+      const pathname = new URL(req.raw.url || '/', 'http://localhost').pathname;
+      const isApi = pathname === '/api' || pathname.startsWith('/api/') || ['/healthz', '/readyz'].includes(pathname);
+      const isAsset = pathname.startsWith('/assets/') || path.posix.extname(pathname) !== '';
+      if (req.method === 'GET' && !isApi && !isAsset && req.headers.accept?.includes('text/html')) {
+        return reply.type('text/html').header('Cache-Control', 'no-cache').send(indexHtml);
+      }
+      return reply.code(404).send({ error: 'Not found' });
+    });
+  }
   return app;
 }

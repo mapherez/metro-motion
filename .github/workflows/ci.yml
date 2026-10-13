@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: false
+
+env:
+  TURBO_TELEMETRY_DISABLED: '1'
+
+jobs:
+  checks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Install pinned pnpm and dependencies
+        run: |
+          npm install --global pnpm@8.15.5
+          pnpm install --frozen-lockfile
+      - name: Check release version
+        run: pnpm version:check
+      - name: Build, typecheck and tests
+        run: pnpm test
+      - name: Docker Compose integration (mock, no Metro token)
+        run: pnpm test:integration
+
+  publish-app:
+    needs: checks
+    if: startsWith(github.ref, 'refs/tags/v') && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/docker-app.yml
+

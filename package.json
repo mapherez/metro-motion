@@ -1,9 +1,10 @@
 {
   "name": "metro-live",
+  "version": "1.0.0",
   "private": true,
   "packageManager": "pnpm@8.15.5",
   "engines": {
-    "node": ">=20.0.0",
+    "node": ">=24.0.0",
     "pnpm": ">=8.15.5"
   },
   "scripts": {
@@ -16,7 +17,12 @@
     "build:front": "turbo run build --filter=@metro/frontend",
     "build:back": "turbo run build --filter=@metro/backend",
 
-    "lint": "turbo run lint",
+    "lint": "pnpm typecheck",
+    "typecheck": "pnpm build",
+    "test": "pnpm build && pnpm --filter @metro/backend test && node --test tools/test/*.test.mjs",
+    "test:integration": "node tools/test-compose.mjs",
+    "release": "node tools/release.mjs",
+    "version:check": "node tools/version.mjs",
     "clean": "turbo run clean",
     "extract:stations": "node tools/extract-stations.mjs",
 

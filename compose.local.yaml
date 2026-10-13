@@ -1,0 +1,7 @@
+# Compilação local para desenvolvimento/testes, sem precisar de imagens no GHCR.
+services:
+  app:
+    image: metro-motion-app:${APP_IMAGE_TAG:-local}
+    build:
+      context: .
+      dockerfile: infra/docker/backend.Dockerfile
