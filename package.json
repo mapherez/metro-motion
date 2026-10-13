@@ -1,6 +1,6 @@
 {
   "name": "metro-live",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "packageManager": "pnpm@8.15.5",
   "engines": {
@@ -9,14 +9,11 @@
   },
   "scripts": {
     "dev": "turbo run dev --parallel",
-
     "dev:front": "turbo run dev --filter=@metro/frontend",
     "dev:back": "turbo run dev --filter=@metro/backend",
-
     "build": "turbo run build",
     "build:front": "turbo run build --filter=@metro/frontend",
     "build:back": "turbo run build --filter=@metro/backend",
-
     "lint": "pnpm typecheck",
     "typecheck": "pnpm build",
     "test": "pnpm build && pnpm --filter @metro/backend test && node --test tools/test/*.test.mjs",
@@ -25,7 +22,6 @@
     "version:check": "node tools/version.mjs",
     "clean": "turbo run clean",
     "extract:stations": "node tools/extract-stations.mjs",
-
     "purge:nm": "pnpm dlx rimraf --glob \"**/node_modules\" node_modules",
     "purge:cache": "pnpm dlx rimraf --glob \"**/.turbo\" \"**/.vite\" \"**/.cache\" \"**/tsconfig.tsbuildinfo\"",
     "purge:dist": "pnpm dlx rimraf --glob \"**/dist\" dist",
