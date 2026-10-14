@@ -1,21 +1,48 @@
-import { z } from 'zod';
-import type { Config } from './config.js';
+import { z } from "zod";
+import type { Config } from "./config.js";
 
-export const MetroResponse = z.object({
-  codigo: z.union([z.string(),z.number()]).optional(),
-  resposta: z.array(z.object({
-    stop_id: z.string(), cais: z.string().optional(), hora: z.string(), destino: z.string().optional(),
-    comboio: z.string().optional(), tempoChegada1: z.string().optional(),
-    comboio2: z.string().optional(), tempoChegada2: z.string().optional(),
-    comboio3: z.string().optional(), tempoChegada3: z.string().optional(),
-    sairServico: z.union([z.string(),z.number()]).optional(), UT: z.union([z.string(),z.number()]).optional()
-  }).passthrough())
-});
-export async function fetchMetro(config: Config, endpoint: string, signal: AbortSignal): Promise<unknown> {
-  const base = config.metroApi.base.replace(/\/?$/, '/');
+export const MetroResponse = z
+  .object({
+    codigo: z.union([z.string(), z.number()]).optional(),
+    resposta: z.array(
+      z
+        .object({
+          stop_id: z.string(),
+          cais: z.string().optional(),
+          hora: z.string(),
+          destino: z.string().optional(),
+          comboio: z.string().optional(),
+          tempoChegada1: z.string().optional(),
+          comboio2: z.string().optional(),
+          tempoChegada2: z.string().optional(),
+          comboio3: z.string().optional(),
+          tempoChegada3: z.string().optional(),
+          sairServico: z.union([z.string(), z.number()]).optional(),
+          UT: z.union([z.string(), z.number()]).optional(),
+        })
+        .passthrough(),
+    ),
+  })
+  .refine(
+    (data) => data.codigo === undefined || String(data.codigo) === "200",
+    "Metro returned an unsuccessful response",
+  );
+export async function fetchMetro(
+  config: Config,
+  endpoint: string,
+  signal: AbortSignal,
+): Promise<unknown> {
+  const base = config.metroApi.base.replace(/\/?$/, "/");
   const response = await fetch(new URL(endpoint, base), {
-    headers: { Accept: 'application/json', Authorization: `Bearer ${config.metroApi.key}` }, signal
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${config.metroApi.key}`,
+    },
+    signal,
   });
-  if (!response.ok) throw Object.assign(new Error(`Metro API HTTP ${response.status}`), { status: response.status });
+  if (!response.ok)
+    throw Object.assign(new Error(`Metro API HTTP ${response.status}`), {
+      status: response.status,
+    });
   return response.json();
 }

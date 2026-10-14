@@ -2,12 +2,14 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { Ingestor } from '../dist/ingestor.js';
-import { normalizeTempoEspera, buildStationEtaSnapshot } from '@metro/shared-utils';
+import { normalizeTempoEspera, buildStationEtaSnapshot, formatMetroTime, parseMetroTime } from '@metro/shared-utils';
 import { Snapshot, StationEtaSnapshot } from '@metro/shared-types';
 import { FakeRedis, logger, settings, nextTurn } from './helpers.mjs';
 
 const fixture = JSON.parse(await readFile(new URL('../../../tools/assets/tempoEspera_Estacao_todos.json', import.meta.url), 'utf8'));
 const open = () => new Date('2026-01-15T12:00:00Z');
+const sourceTime = Math.max(...fixture.resposta.map(row => parseMetroTime(row.hora)));
+const liveFixture = () => ({ ...fixture, resposta: fixture.resposta.map(row => ({ ...row, hora: formatMetroTime(open().getTime()/1000+parseMetroTime(row.hora)-sourceTime) })) });
 
 test('fixture normalization produces valid trains and ETAs for all four lines', () => {
   const trains = normalizeTempoEspera(fixture, new Map(), new Map(), 25);
@@ -41,14 +43,14 @@ test('API failure preserves snapshot and ETA timestamps and applies backoff', as
   const config = settings({ mock: false });
   let calls = 0;
   const ingestor = new Ingestor(config, redis, logger, {
-    now: open, fetchData: async () => { if (++calls === 1) return fixture; throw Object.assign(new Error(), { status: 429 }); }
+    now: open, fetchData: async () => { if (++calls === 1) return liveFixture(); throw Object.assign(new Error(), { status: 429 }); }
   });
   await ingestor.pollOnce();
   const before = await redis.get(config.redis.snapshotKey);
-  const etas = await redis.get(config.redis.stationEtaKey);
+  assert.ok(Object.values(JSON.parse(before).lines).every(line => line.trains.length > 0));
   assert.ok(await ingestor.pollOnce() >= 7900);
   assert.equal(await redis.get(config.redis.snapshotKey), before);
-  assert.equal(await redis.get(config.redis.stationEtaKey), etas);
+  assert.equal(await redis.get(config.redis.stationEtaKey), null, 'ETAs share the unified snapshot; no second cache');
   assert.ok(await ingestor.pollOnce() >= 13900);
 });
 test('closed snapshots refresh before TTL and recover after a Redis outage', async () => {
@@ -96,12 +98,12 @@ test('opening during an upstream outage changes service state without refreshing
   assert.equal(opened.serviceOpen, true);
   assert.equal(opened.t, closed.t);
 });
-test('a partially valid response cannot replace either last-good snapshot', async () => {
+test('invalid ETA rows do not contaminate the last valid unified snapshot', async () => {
   const redis = new FakeRedis();
   const config = settings({ mock: false });
   let calls = 0;
   const ingestor = new Ingestor(config, redis, logger, {
-    now: open, fetchData: async () => ++calls === 1 ? fixture : {
+    now: open, fetchData: async () => ++calls === 1 ? liveFixture() : {
       resposta: [{ stop_id: 'RM', hora: '20260115120000', comboio: '7C', tempoChegada1: '-1', destino: '54' }]
     }
   });

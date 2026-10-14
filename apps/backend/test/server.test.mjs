@@ -17,12 +17,18 @@ test('HTTP snapshots, line ETAs, invalid cache data and dependency readiness', a
   const snapshot = toSnapshot([]);
   await redis.set(config.redis.snapshotKey, JSON.stringify(snapshot), 'EX', 15);
   assert.deepEqual((await app.inject('/api/now')).json(), snapshot);
-  await redis.set(config.redis.stationEtaKey, JSON.stringify(buildStationEtaSnapshot({ resposta: [] })), 'EX', 15);
   for (const line of ['azul', 'verde', 'vermelha', 'amarela']) {
     const response = await app.inject(`/api/lines/${line}/etas`);
     assert.equal(response.statusCode, 200);
     assert.equal(response.json().line, line);
+    assert.equal(response.json().schemaVersion, 2);
+    assert.deepEqual(response.json().stations, snapshot.lines[line].stations);
   }
+  const station = (await app.inject('/api/stations/AM')).json();
+  assert.equal(station.station.id, 'AM');
+  assert.deepEqual(station.station.lines, ['verde', 'vermelha']);
+  assert.ok(station.station.lat && station.station.lon);
+  assert.equal((await app.inject('/api/stations/UNKNOWN')).statusCode, 404);
   assert.equal((await app.inject('/api/lines/invalid/etas')).statusCode, 404);
   await redis.set(config.redis.snapshotKey, '{broken', 'EX', 15);
   assert.equal((await app.inject('/api/now')).statusCode, 500);
@@ -46,7 +52,7 @@ test('SPA navigation works without swallowing missing APIs or assets', async t =
   await writeFile(path.join(dir, 'assets', 'app.js'), 'console.log("metro")');
   const app = buildServer(settings({ production: true, frontendDist: dir }), { redis: new FakeRedis(), logger: false });
   t.after(() => app.close());
-  for (const url of ['/', '/about', '/line/azul']) {
+  for (const url of ['/', '/about', '/line/azul', '/station/AM']) {
     const response = await app.inject({ url, headers: { accept: 'text/html' } });
     assert.equal(response.statusCode, 200, url);
     assert.equal(response.body, '<html>metro</html>');

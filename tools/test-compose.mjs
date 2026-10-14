@@ -71,15 +71,32 @@ async function snapshot() {
   });
 }
 
+const frameBuffers = new WeakMap();
+const frameDecoders = new WeakMap();
 async function nextFrame(reader) {
   let timer;
   try {
-    const result = await Promise.race([
-      reader.read(),
-      new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('SSE frame timed out')), 10000); })
-    ]);
-    assert.equal(result.done, false);
-    return new TextDecoder().decode(result.value);
+    const deadline = Date.now() + 10000;
+    const decoder = frameDecoders.get(reader) ?? new TextDecoder();
+    frameDecoders.set(reader, decoder);
+    let buffer = frameBuffers.get(reader) ?? '';
+    while (true) {
+      const boundary = buffer.indexOf('\n\n');
+      if (boundary >= 0) {
+        const frame = buffer.slice(0, boundary);
+        buffer = buffer.slice(boundary + 2);
+        frameBuffers.set(reader, buffer);
+        if (frame.startsWith('data:')) return frame;
+        continue;
+      }
+      const result = await Promise.race([
+        reader.read(),
+        new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('SSE frame timed out')), Math.max(1, deadline - Date.now())); })
+      ]);
+      clearTimeout(timer);
+      assert.equal(result.done, false);
+      buffer += decoder.decode(result.value, { stream: true });
+    }
   } finally { clearTimeout(timer); }
 }
 
@@ -103,7 +120,7 @@ try {
     ? `if(process.arch !== '${platform === 'linux/arm64' ? 'arm64' : 'x64'}') process.exit(1); console.log('Runtime:', process.platform, process.arch)`
     : "console.log('Runtime:', process.platform, process.arch)");
   await snapshot();
-  for (const route of ['/', '/about', '/line/azul', '/line/verde', '/line/amarela', '/line/vermelha']) {
+  for (const route of ['/', '/about', '/line/azul', '/line/verde', '/line/amarela', '/line/vermelha', '/station/AM']) {
     const response = await fetch(`${address}${route}`, { headers: { Accept: 'text/html' }, signal: AbortSignal.timeout(5000) });
     assert.equal(response.status, 200, route);
     const html = await response.text();
@@ -121,6 +138,10 @@ try {
   }
   assert.equal((await get('/api/missing')).status, 404);
   assert.equal((await get('/assets/missing.js')).status, 404);
+  const details = await (await get('/api/stations/AM')).json();
+  assert.equal(details.schemaVersion, 2);
+  assert.equal(details.station.id, 'AM');
+  assert.equal(details.lines.length, 2);
   const first = await connect();
   const second = await connect();
   await compose('exec', '-T', 'app', 'node', '--input-type=module', '-e',

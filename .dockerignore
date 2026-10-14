@@ -12,5 +12,6 @@ _examples
 **/.cache
 output
 .test-artifacts
+.playwright-cli
 **/*.tsbuildinfo
 **/*.log

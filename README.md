@@ -46,9 +46,11 @@ Definir `METRO_MOCK=1` no `.env` e executar novamente:
 docker compose up -d --wait
 ```
 
-O mock usa a fixture versionada incluída na imagem, não precisa de token,
-ignora o horário de encerramento e nunca consulta a API externa. Os valores
-da fixture são repetidos a cada polling; não simulam circulação real.
+O mock usa um cenário temporal determinístico incluído na imagem, com dois
+comboios por linha, paragens e inversões nos terminais. Não precisa de token,
+ignora o horário de encerramento e nunca consulta a API externa. Este cenário
+é sintético: serve para desenvolvimento e testes, não para calibrar posições
+reais. A fixture antiga permanece nos testes auxiliares.
 
 ## Configuração
 
@@ -60,8 +62,10 @@ da fixture são repetidos a cada polling; não simulam circulação real.
 | `METRO_API_KEY` | Token obrigatório em modo real; apenas no `.env` local |
 | `METRO_MOCK` | `0`; usar `1` para dados locais |
 | `POLL_INTERVAL_MS` | `2000`, intervalo entre ciclos de polling |
-| `DWELL_SECONDS` | `25`, usado na inferência dos movimentos |
+| `DWELL_SECONDS` | `25`, estimativa inicial de paragem; as observações ajustam as estimativas |
 | `REDIS_TTL_SECONDS` | `15`, validade da cache |
+| `MAP_TILE_URL` | Vazio: tiles OpenStreetMap; permite configurar outro fornecedor |
+| `MAP_TILE_ATTRIBUTION` | Atribuição visível do fornecedor de tiles |
 
 No Compose, `REDIS_URL` é fixado em `redis://redis:6379`; o frontend usa
 `/api` na mesma origem, sem configuração de domínio ou IP no build.
@@ -81,9 +85,17 @@ imagem através de `NODE_EXTRA_CA_CERTS`. Não usar `METRO_TLS_INSECURE` ou
 | `GET /api/now` | Snapshot; `204` se ainda não existir |
 | `GET /api/lines/:lineId/etas` | ETAs de `azul`, `amarela`, `verde` ou `vermelha` |
 | `GET /api/stream` | Eventos SSE e heartbeat a cada 20 segundos |
+| `GET /api/stations/:stationId` | Metadados, chegadas de todas as linhas e configuração do mapa local |
+
+O contrato do snapshot é `schemaVersion: 2`. Trajetórias, chegadas por estação
+e estado do operador partilham uma única chave Redis. `t` identifica a última
+observação utilizável (ou a criação de um estado sem observações); `receivedAt`
+identifica o processamento. A frescura depende de `observedAt` por comboio/cais,
+nunca da data do último HTTP 200. O header `X-Server-Time` em `/api/now`
+sincroniza o relógio de apresentação do browser.
 
 Os endpoints antigos sem `/api` foram substituídos. Rotas como `/about` e
-`/line/azul` funcionam ao carregar diretamente no browser. APIs e assets
+`/line/azul` e `/station/AM` funcionam ao carregar diretamente no browser. APIs e assets
 inexistentes devolvem `404`.
 
 Entre 01:00 e 06:30 em `Europe/Lisbon`, o ingestor não consulta o Metro e
@@ -92,6 +104,57 @@ aplicam backoff e mantêm os timestamps originais dos últimos dados. A interfac
 assinala dados com mais de 30 segundos e oculta ETAs antigos. Uma falha do
 fornecedor não torna o container unhealthy; o healthcheck verifica Redis.
 Ligações Redis são restabelecidas automaticamente, e o browser reconecta SSE.
+
+O acompanhamento distingue cada viagem das previsões de regresso do mesmo
+comboio. As curvas preservam posição e velocidade nas correções de ETA,
+respeitam limites em unidades esquemáticas de estações e não avançam para
+segmentos não confirmados. Após 30 segundos sem observações frescas, os
+marcadores param e ficam assinalados como desatualizados. Correções incompatíveis
+e mudanças de sentido exigem reconfirmação e usam desaparecimento/reaparecimento
+gradual. Uma resposta repetida não renova a validade dos dados.
+
+Após duas respostas globais vazias durante o horário de serviço, o ingestor
+consulta as quatro linhas, verificando a recuperação do endpoint global a cada
+60 segundos. Dados `--`, negativos, antigos ou sem sentido resolvido não criam
+posições fictícias. Horário normal, estado comunicado pelo operador e ausência
+de dados são conceitos separados, incluindo durante greves. Metadados são
+consultados no arranque e diariamente; estado das linhas, a cada 60 segundos.
+
+## Interface e validação com dados reais
+
+O desktop abre o mapa a partir de 1200 px com ponteiro preciso. Mobile/tablet
+abrem as linhas; o seletor Mapa/Linhas guarda a preferência. As listas de
+estações apresentam a linha vertical e os comboios nos dois sentidos, usando
+o mesmo motor que o mapa geral. O desenho, posições e cores do mapa oficial
+permanecem preservados.
+
+Os dots e nomes abrem um drawer à direita: até 440 px no desktop, ecrã inteiro
+em mobile/tablet. Fecha por botão, Escape, Voltar ou swipe à direita a partir
+do cabeçalho/margem. A lista e o scroll permanecem por baixo do drawer.
+Os detalhes incluem chegadas, correspondências, horários com fonte e data de
+verificação, links oficiais e Leaflet/OpenStreetMap carregado apenas ao abrir
+a estação. O mapa local não exige chave. Os tiles são externos e requerem
+atribuição visível; não existe download em massa nem cache offline da app.
+
+A animação ajusta-se às previsões atuais da API; não depende de recolher
+sessões anteriores nem de assumir durações constantes ao longo do dia.
+Gravar uma sequência é opcional e permite reproduzir alterações de ETA e
+investigar problemas de movimento. A duração é livre; por exemplo, com Node 24:
+
+```sh
+pnpm record:metro --probe
+pnpm record:metro --sessions 1 --minutes 15
+pnpm replay:metro .test-artifacts/recordings/metro-SESSAO.jsonl .test-artifacts/replay.json
+```
+
+O gravador recusa iniciar sem ETAs numéricos atuais; grava apenas campos de
+dados permitidos, sem URLs de API, headers ou credenciais. Cada sessão tem
+manifesto com duração, completude, frames utilizáveis e erros. Uma gravação
+interrompida não conta como sessão completa. Os ficheiros ficam fora do Git.
+Selecionar o JSON convertido com `METRO_MOCK_FILE` para reproduzir a sequência;
+fora de Docker pode usar o caminho local, em Docker deve montar o ficheiro.
+O replay preserva intervalos, timestamps relativos e falhas de atualização:
+quando a sequência acaba, os dados tornam-se antigos, sem renovação artificial.
 
 ## Operação, atualização e rollback
 
@@ -206,6 +269,7 @@ o Compose de produção mantém Redis sem portas publicadas.
 
 ```sh
 pnpm test                 # Build + node:test (sem Redis/API externos)
+pnpm test:presentation    # Motor do frontend com relógio e snapshots simulados
 pnpm version:check        # Verifica a versão do projeto/Compose/exemplo
 pnpm typecheck           # Compila e verifica tipos dos workspaces
 pnpm test:integration    # Stack Compose isolado, mock, reinícios e SSE real
