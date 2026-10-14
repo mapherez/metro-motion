@@ -32,7 +32,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
     port: positiveInt('PORT', 8080, 65535),
     metroApi: { base: url('METRO_API_BASE', base, ['https:']), key },
     mock,
-    mockFile: env.METRO_MOCK_FILE || path.join(repoRoot, 'tools/assets/tempoEspera_Estacao_todos.json'),
+    mockFile: env.METRO_MOCK_FILE || path.join(repoRoot, 'tools/assets/mock-sequence.json'),
     pollIntervalMs: positiveInt('POLL_INTERVAL_MS', 2000, 3600000),
     dwellSeconds: positiveInt('DWELL_SECONDS', 25),
     redis: {
@@ -42,6 +42,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
       snapshotKey: env.REDIS_SNAPSHOT_KEY || 'metro:snapshot',
       stationEtaKey: env.REDIS_STATION_ETA_KEY || 'metro:station-etas'
     },
-    frontendDist: env.FRONTEND_DIST_DIR || path.join(repoRoot, 'apps/frontend/dist')
+    frontendDist: env.FRONTEND_DIST_DIR || path.join(repoRoot, 'apps/frontend/dist'),
+    tiles: {
+      url: env.MAP_TILE_URL || 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+      attribution: env.MAP_TILE_ATTRIBUTION || '© OpenStreetMap contributors'
+    }
   };
 }

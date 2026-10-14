@@ -1,48 +1,28 @@
-import { type CSSProperties } from "react";
-import { Link } from "react-router-dom";
-import { MetroMap } from "../components/MetroMap";
-
-const LINES = [
-  { id: "azul", label: "Azul", color: "var(--line-azul)" },
-  { id: "amarela", label: "Amarela", color: "var(--line-amarela)" },
-  { id: "verde", label: "Verde", color: "var(--line-verde)" },
-  { id: "vermelha", label: "Vermelha", color: "var(--line-vermelha)" },
-];
-
-const focusRing =
-  "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]";
-
-const desktopMapStyle: CSSProperties = {
-  minHeight: "calc(100dvh - var(--shell-header-height, 0px) - var(--shell-footer-height, 0px))",
-};
+import { Link } from 'react-router-dom';
+import { lineNames, lineOrder } from '@metro/station-data';
+import { stationById } from '@metro/station-data/stations';
+import { MetroMap } from '../components/MetroMap';
+import { LINE_COLOR, LINE_LABEL } from '../format';
+import { useSnapshotStore } from '../state';
 
 export function Home() {
-  return (
-    <div className="flex h-full flex-col">
-      <div className="hidden md:flex md:flex-1" style={desktopMapStyle}>
-        <div className="flex min-h-0 flex-1">
-          <MetroMap />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4 p-4 md:hidden">
-        {LINES.map((line) => (
-          <Link
-            key={line.id}
-            to={`/line/${line.id}`}
-            aria-label={`Abrir linha ${line.label}`}
-            className={`aspect-square min-h-11 min-w-11 rounded-2xl border border-white/10 bg-[var(--bg-soft)] shadow flex flex-col items-center justify-center gap-3 text-lg font-semibold transition duration-150 hover:scale-[1.02] hover:text-[var(--fg)] ${focusRing}`}
-          >
-            <span
-              className="rounded px-4 py-2 text-sm font-medium text-white"
-              style={{ background: line.color }}
-            >
-              {line.label}
-            </span>
-            <span className="text-xs text-muted">Ver paragens e ETAs</span>
-          </Link>
-        ))}
-      </div>
+  const {view,setView,snapshot,now}=useSnapshotStore();
+  return <div className={`home-view ${view==='map'?'map-home':''}`}>
+    <div className="page-heading"><div><p className="eyebrow">A rede, neste momento</p><h1>O seu próximo metro.</h1><p className="lead">Consulte chegadas e acompanhe a circulação estimada.</p></div>
+      <div className="view-switch" role="group" aria-label="Vista da rede"><button aria-pressed={view==='map'} onClick={()=>setView('map')}>Mapa</button><button aria-pressed={view==='lines'} onClick={()=>setView('lines')}>Linhas</button></div>
     </div>
-  );
+    {view==='map'?<MetroMap/>:<div className="line-grid">
+      {lineNames.map(line=>{
+        const data=snapshot?.lines[line];
+        const stale=!data?.dataObservedAt||now-data.dataObservedAt>=30;
+        const normal=data?.status.summary==='normal';
+        const statusFresh=!!data?.status.observedAt&&now-data.status.observedAt<120;
+        return <Link key={line} to={`/line/${line}`} className="line-card" style={{'--line-color':LINE_COLOR[line]} as React.CSSProperties}>
+          <div className="card-top"><span className="line-badge">Linha {LINE_LABEL[line]}</span><span className="card-arrow" aria-hidden="true">↗</span></div>
+          <h2>{LINE_LABEL[line]}</h2><p className="line-endpoints">{stationById[lineOrder[line][0]].name} <span aria-hidden="true">↔</span> {stationById[lineOrder[line][lineOrder[line].length-1]].name}</p>
+          <div className="card-bottom"><span>{lineOrder[line].length} estações</span><span className={stale?'muted':normal?'status-normal':'status-alert'}>{snapshot?.serviceOpen===false?'Serviço encerrado':stale?'Sem dados atuais':statusFresh?data?.status.message:'Chegadas disponíveis'}</span></div>
+        </Link>;
+      })}
+    </div>}
+  </div>;
 }

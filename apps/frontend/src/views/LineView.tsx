@@ -1,231 +1,58 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
-import { destinos, lineNames, lineOrder } from "@metro/station-data";
-import type { LineName } from "@metro/station-data";
-import { stationById } from "@metro/station-data/stations";
-import type { StationEta } from "@metro/shared-types";
-import { useShellContext } from "../shell-context";
-import { API_BASE, STALE_AFTER_SECONDS } from "../api";
+import { useLayoutEffect, useRef, useState } from 'react';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { lineNames, lineOrder } from '@metro/station-data';
+import { stationById } from '@metro/station-data/stations';
+import type { LineName, Train } from '@metro/shared-types';
+import { useSnapshotStore } from '../state';
+import { etaText, freshArrivals, LINE_COLOR, LINE_LABEL } from '../format';
+import { renderedMotion, subscribeMotion } from '../motion-engine';
 
-const LABEL_BY_LINE: Record<LineName, string> = {
-  azul: "Azul",
-  amarela: "Amarela",
-  verde: "Verde",
-  vermelha: "Vermelha",
-};
-
-const focusRing =
-  "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]";
-
-const REFRESH_INTERVAL_MS = 6000;
-const CLOSED_REFRESH_INTERVAL_MS = 60000;
-
-function normalizeLineName(id: string | undefined): LineName {
-  if (!id) return "azul";
-  const normalized = id.toLowerCase();
-  const allowed = lineNames as LineName[];
-  return allowed.includes(normalized as LineName) ? (normalized as LineName) : "azul";
+function RailTrain({train,centers}:{train:Train;centers:number[]}) {
+  const ref=useRef<HTMLButtonElement>(null);
+  const [selected,setSelected]=useState(false);
+  useLayoutEffect(()=>subscribeMotion(at=>{
+    const element=ref.current;if(!element||centers.length===0)return;
+    const sample=renderedMotion(train,at),p=Math.max(0,Math.min(centers.length-1,sample.position));
+    const index=Math.floor(p),last=Math.min(index+1,centers.length-1);
+    const y=centers[index]+(centers[last]-centers[index])*(p-index);
+    element.style.transform=`translate(${train.direction===1?10:-10}px, ${y}px)`;
+    element.style.opacity=String(sample.opacity);element.dataset.phase=sample.phase;
+  }),[train,centers]);
+  return <button ref={ref} className={`rail-train ${selected?'selected':''}`} aria-label={`Comboio ${train.id}, sentido ${train.dest}. Posição estimada.`} aria-pressed={selected} onClick={()=>setSelected(!selected)} title={`${train.id} → ${train.dest}`}><span aria-hidden="true">{train.direction===1?'↓':'↑'}</span>{selected&&<span className="rail-train-label">{train.id} · {train.dest}</span>}</button>;
 }
-
-type LineEtaResponse = {
-  line: LineName;
-  t: number;
-  stations: StationEta[];
-};
-
-function formatEta(seconds: number): string {
-  if (seconds <= 0) return "Chegada";
-  const minutes = Math.floor(seconds / 60);
-  const rem = seconds % 60;
-  return `${String(minutes).padStart(2, "0")}:${String(rem).padStart(2, "0")}`;
-}
-
 export function LineView() {
-  const params = useParams();
-  const ln = normalizeLineName(params.id);
-  const { serviceOpen } = useShellContext();
-
-  const [lineEtas, setLineEtas] = useState<LineEtaResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [nowSec, setNowSec] = useState(() => Math.floor(Date.now() / 1000));
-
-  useEffect(() => {
-    const tick = () => setNowSec(Math.floor(Date.now() / 1000));
-    const id = window.setInterval(tick, 1000);
-    tick();
-    return () => {
-      window.clearInterval(id);
+  const {id}=useParams();const normalized=id?.toLowerCase() as LineName;
+  const line=lineNames.includes(normalized)?normalized:undefined;
+  const snapshot=useSnapshotStore(s=>s.snapshot),now=useSnapshotStore(s=>s.now);
+  const location=useLocation(),navigate=useNavigate();
+  const listRef=useRef<HTMLOListElement>(null),rowRefs=useRef(new Map<string,HTMLButtonElement>());
+  const [centers,setCenters]=useState<number[]>([]);
+  useLayoutEffect(()=>{
+    const list=listRef.current;if(!list||!line)return;
+    const measure=()=>{
+      const bounds=list.getBoundingClientRect();
+      setCenters(lineOrder[line].map(id=>{const row=rowRefs.current.get(id);const rect=row?.getBoundingClientRect();return rect?rect.top-bounds.top+rect.height/2:0;}));
     };
-  }, []);
-
-  useEffect(() => {
-    let active = true;
-    const controller = new AbortController();
-    let timer: number | undefined;
-    let isFirstFetch = true;
-
-    const schedule = (delay: number) => {
-      if (!active) return;
-      timer = window.setTimeout(fetchEtas, delay);
-    };
-
-    const fetchEtas = async () => {
-      let nextDelay = REFRESH_INTERVAL_MS;
-      if (!active) return;
-      if (serviceOpen === false) {
-        setLineEtas(null);
-        setError(null);
-        if (isFirstFetch) {
-          setLoading(false);
-          isFirstFetch = false;
-        }
-        nextDelay = CLOSED_REFRESH_INTERVAL_MS;
-        schedule(nextDelay);
-        return;
-      }
-      try {
-        if (isFirstFetch) {
-          setLoading(true);
-        }
-        setError(null);
-        const res = await fetch(`${API_BASE}/lines/${ln}/etas`, { signal: controller.signal });
-        if (!active) return;
-        if (res.status === 204) {
-          setLineEtas(null);
-          return;
-        }
-        if (!res.ok) {
-          throw new Error(`HTTP ${res.status}`);
-        }
-        const json = (await res.json()) as LineEtaResponse;
-        setLineEtas(json);
-      } catch (err: any) {
-        if (!active) return;
-        setError(err?.message ?? "Falha ao carregar tempos de chegada");
-      } finally {
-        if (!active) return;
-        if (isFirstFetch) {
-          setLoading(false);
-          isFirstFetch = false;
-        }
-        schedule(nextDelay);
-      }
-    };
-
-    fetchEtas();
-
-    return () => {
-      active = false;
-      controller.abort();
-      if (timer !== undefined) {
-        window.clearTimeout(timer);
-      }
-    };
-  }, [ln, serviceOpen]);
-
-  const stationLookup = useMemo(() => {
-    const map = new Map<string, StationEta>();
-    if (lineEtas?.stations) {
-      for (const station of lineEtas.stations) {
-        map.set(station.stationId, station);
-      }
-    }
-    return map;
-  }, [lineEtas]);
-
-  return (
-    <div className="flex flex-col">
-      <header className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-white/10 bg-[var(--bg)]/90 px-4 py-3 backdrop-blur">
-        <Link
-          to="/"
-          className={`inline-flex items-center gap-2 rounded-full border border-white/10 bg-[var(--bg-soft)] px-4 py-2 text-sm font-medium text-[var(--fg)] transition-colors hover:text-[var(--fg)] ${focusRing}`}
-        >
-          <span aria-hidden>&lt;</span>
-          <span>Voltar</span>
-        </Link>
-        <div className="flex flex-col items-end text-right">
-          <p className="text-xs uppercase tracking-wide text-muted">Linha</p>
-          <p className="text-sm font-semibold text-[var(--fg)]">{LABEL_BY_LINE[ln]}</p>
-        </div>
-      </header>
-      <div className="space-y-4 px-4 py-4">
-        {error ? (
-          <p className="text-sm text-[var(--alert-error)]">{error}</p>
-        ) : null}
-        {lineEtas && nowSec - lineEtas.t > STALE_AFTER_SECONDS ? (
-          <p className="text-sm text-[var(--alert)]">Dados desatualizados — a aguardar atualização.</p>
-        ) : null}
-        {serviceOpen === false ? (
-          <p className="text-sm text-muted">Serviço encerrado (01:00 – 06:30)</p>
-        ) : null}
-        <ol className="space-y-3">
-          {lineOrder[ln].map((stationId) => {
-            const station = stationById[stationId];
-            const arrivals = lineEtas && nowSec - lineEtas.t <= STALE_AFTER_SECONDS
-              ? stationLookup.get(stationId)?.arrivals ?? [] : [];
-            const elapsed = Math.max(0, nowSec - (lineEtas?.t ?? 0));
-
-            // Group arrivals by destinoId, keeping only the earliest ETA for each destination
-            const nextArrivalsByDestino: Record<string, typeof arrivals[0]> = {};
-            arrivals.forEach((a) => {
-              if (!a.destinoId) return;
-              if (!nextArrivalsByDestino[a.destinoId] || a.etaSeconds < nextArrivalsByDestino[a.destinoId].etaSeconds) {
-                nextArrivalsByDestino[a.destinoId] = a;
-              }
-            });
-
-            // Always show both directions (terminals) if available, otherwise show all destinations
-            const terminalIds = [lineOrder[ln][0], lineOrder[ln][lineOrder[ln].length - 1]];
-            const terminalDestinoIds = Object.entries(destinos)
-              .filter(([id, d]) => d?.terminal && terminalIds.includes(d.terminal))
-              .map(([id]) => id);
-
-            // If both terminal destinations are present, show them; otherwise show all available destinations
-            let displayDestinoIds: string[];
-            if (terminalDestinoIds.every(id => nextArrivalsByDestino[id])) {
-              displayDestinoIds = terminalDestinoIds;
-            } else {
-              displayDestinoIds = Object.keys(nextArrivalsByDestino);
-            }
-
-            // Sort by ETA ascending
-            displayDestinoIds.sort((a, b) => nextArrivalsByDestino[a].etaSeconds - nextArrivalsByDestino[b].etaSeconds);
-
-            return (
-              <li
-                key={stationId}
-                className="flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-[var(--bg-soft)] px-4 py-3"
-              >
-                <div className="flex items-center gap-3">
-                  <span
-                    aria-hidden
-                    className="inline-block h-3 w-3 rounded-full"
-                    style={{ background: `var(--line-${ln})` }}
-                  />
-                  <span>{station?.name ?? stationId}</span>
-                </div>
-                <div className="flex flex-col text-sm text-muted text-right">
-                  {displayDestinoIds.length === 0 ? (
-                    <span>--</span>
-                  ) : (
-                    displayDestinoIds.map((destinoId) => {
-                      const destinoKey = String(destinoId);
-                      const a = nextArrivalsByDestino[destinoKey];
-                      return (
-                        <span key={destinoKey}>
-                          {`${destinos[destinoKey]?.name ?? destinoKey}: ${formatEta(Math.max(0, a.etaSeconds - elapsed))}`}
-                        </span>
-                      );
-                    })
-                  )}
-                </div>
-              </li>
-            );
-          })}
-        </ol>
-        {loading ? <p className="text-xs text-muted">Atualizando tempos…</p> : null}
-      </div>
-    </div>
-  );
+    const observer=new ResizeObserver(measure);observer.observe(list);for(const row of rowRefs.current.values())observer.observe(row);measure();
+    return()=>observer.disconnect();
+  },[line]);
+  if(!line)return <div className="empty-state"><h1>Linha desconhecida</h1><Link to="/">Voltar à rede</Link></div>;
+  const data=snapshot?.lines[line],stale=!data?.dataObservedAt||now-data.dataObservedAt>=30;
+  return <section className="line-view" style={{'--line-color':LINE_COLOR[line]} as React.CSSProperties}>
+    <div className="page-heading"><div><Link to="/" className="back-link">← Rede do Metro</Link><h1><span className="heading-dot" aria-hidden="true"/>Linha {LINE_LABEL[line]}</h1><p className="lead">{lineOrder[line].length} estações · ambos os sentidos</p></div><span className="line-state">{snapshot?.serviceOpen===false?'Serviço encerrado':stale?'Sem dados atuais':data?.status.observedAt&&now-data.status.observedAt<120?data.status.message:'Chegadas em direto'}</span></div>
+    <p className="rail-help">Toque numa estação para ver os próximos comboios e a localização.</p>
+    <ol ref={listRef} className="station-list">
+      <div className="vertical-rail" aria-hidden="true" style={{top:centers[0]??0,height:Math.max(0,(centers[centers.length-1]??0)-(centers[0]??0))}}/>
+      <div className="rail-trains">{data?.trains.map(train=><RailTrain key={train.journeyId} train={train} centers={centers}/>)}</div>
+      {lineOrder[line].map(stationId=>{
+        const station=snapshot?.metadata.find(s=>s.id===stationId)??stationById[stationId];
+        const arrivals=freshArrivals(data?.stations.find(s=>s.stationId===stationId)?.arrivals??[],now);
+        const next=[...new Map(arrivals.map(a=>[`${a.direction}:${a.destinoId}`,a]).reverse()).values()].slice(0,2);
+        return <li key={stationId}><button ref={element=>{if(element)rowRefs.current.set(stationId,element);else rowRefs.current.delete(stationId);}} className="station-row" onClick={()=>navigate(`/station/${stationId}`,{state:{background:location}})}>
+          <span className="station-dot" aria-hidden="true"/><span className="station-name">{station.name}<span className="interchanges">{station.lines.filter(l=>l!==line).map(l=><span key={l} className="interchange" style={{'--badge-color':LINE_COLOR[l]} as React.CSSProperties}>Linha {LINE_LABEL[l]}</span>)}</span></span>
+          <span className="station-etas">{next.length?next.map(a=><span key={`${a.direction}:${a.destinoId}`}><span className="destination-label">{a.destination||'Destino por confirmar'}</span><strong>{etaText(a,now)}</strong></span>):<span className="no-arrivals">—</span>}</span><span className="row-chevron" aria-hidden="true">›</span>
+        </button></li>;
+      })}
+    </ol><p className="view-note">As posições na linha são estimadas. Os tempos de chegada vêm do Metro de Lisboa.</p>
+  </section>;
 }

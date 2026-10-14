@@ -1,135 +1,156 @@
 import { readFile } from 'node:fs/promises';
 import type { FastifyBaseLogger } from 'fastify';
 import { z } from 'zod';
-import { buildStationEtaSnapshot, normalizeTempoEspera, toSnapshot } from '@metro/shared-utils';
-import { Snapshot as SnapshotSchema, StationEtaSnapshot as StationEtaSchema } from '@metro/shared-types';
-import type { Snapshot, StationEtaSnapshot } from '@metro/shared-types';
+import { TrainTracker, type MetroData } from '@metro/shared-utils';
+import { Snapshot as SnapshotSchema, StationMetadata as MetadataSchema } from '@metro/shared-types';
+import type { Snapshot, StationMetadata } from '@metro/shared-types';
+import { lineNames, destinos } from '@metro/station-data';
+import { stationMetadata } from '@metro/station-data/metadata';
 import type { Config } from './config.js';
 import type { RedisClient } from './redis.js';
 import { computeServiceStatus } from './service-hours.js';
+import { fetchMetro, MetroResponse } from './metro-api.js';
+import { replayAt, validateReplay, type Replay } from './replay.js';
 
-const MetroResponse = z.object({
-  resposta: z.array(z.object({
-    stop_id: z.string(), hora: z.string(), destino: z.string().optional(),
-    comboio: z.string().optional(), tempoChegada1: z.string().optional(),
-    comboio2: z.string().optional(), tempoChegada2: z.string().optional(),
-    comboio3: z.string().optional(), tempoChegada3: z.string().optional()
-  }))
-});
-
-type Dependencies = { now?: () => Date; fetchData?: (signal: AbortSignal) => Promise<unknown> };
+type Dependencies = {
+  now?: () => Date;
+  fetchData?: (signal: AbortSignal) => Promise<unknown>;
+  fetchEndpoint?: (endpoint: string, signal: AbortSignal) => Promise<unknown>;
+};
+const lineLabels = { verde: 'Verde', azul: 'Azul', amarela: 'Amarela', vermelha: 'Vermelha' };
+const statusSuffix = { verde: 'vd', azul: 'az', amarela: 'am', vermelha: 'vm' };
 
 export class Ingestor {
   private timer?: NodeJS.Timeout;
-  private controller?: AbortController;
+  private controllers = new Set<AbortController>();
   private pending?: Promise<void>;
   private stopped = true;
   private backoffMs = 0;
-  private prevState = new Map<string, { to: string; segmentStartEta: number; t: number; lastEta: number }>();
-  private stationStates = new Map<string, { lastHora: string }>();
+  private tracker: TrainTracker;
   private lastSnapshot?: Snapshot;
-  private lastStationEtas?: StationEtaSnapshot;
-  private mockData?: unknown;
-
-  constructor(private config: Config, private redis: RedisClient, private log: FastifyBaseLogger, private deps: Dependencies = {}) {}
-
+  private replay?: Replay;
+  private replayStart?: number;
+  private emptyCount = 0;
+  private fallback = false;
+  private nextGlobalCheck = 0;
+  private nextMetadata = 0;
+  private nextStatus = 0;
+  private metadata: StationMetadata[] = stationMetadata;
+  private destinationNames = Object.fromEntries(Object.entries(destinos).flatMap(([id,d]) => d ? [[id,d.name]] : []));
+  private statuses: Partial<Snapshot['lines']> = {};
+  constructor(private config: Config, private redis: RedisClient, private log: FastifyBaseLogger, private deps: Dependencies = {}) {
+    this.tracker = new TrainTracker(config.dwellSeconds);
+  }
+  private now() { return (this.deps.now?.() ?? new Date()).getTime() / 1000; }
   async start() {
     if (!this.stopped) return;
-    if (this.config.mock) {
-      // Fail before listening; a broken mock must never fall back to the real API.
-      this.mockData = MetroResponse.parse(JSON.parse(await readFile(this.config.mockFile, 'utf8')));
-    }
-    this.stopped = false;
-    this.pending = this.loop();
+    if (this.config.mock) this.replay = validateReplay(JSON.parse(await readFile(this.config.mockFile, 'utf8')));
+    this.stopped = false; this.pending = this.loop();
   }
-
   async stop() {
     this.stopped = true;
     if (this.timer) clearTimeout(this.timer);
-    this.controller?.abort();
+    for (const controller of this.controllers) controller.abort();
     await this.pending;
   }
-
   private async loop() {
-    const nextMs = await this.pollOnce();
-    if (!this.stopped) {
-      this.timer = setTimeout(() => { this.pending = this.loop(); }, nextMs);
-    }
+    const next = await this.pollOnce();
+    if (!this.stopped) this.timer = setTimeout(() => { this.pending = this.loop(); }, next);
   }
-
-  private async publish(snapshot: Snapshot, stationEtas?: StationEtaSnapshot) {
-    if (stationEtas) await this.redis.set(this.config.redis.stationEtaKey, JSON.stringify(stationEtas), 'EX', this.config.redis.ttlSeconds);
+  private async publish(snapshot: Snapshot) {
     const payload = JSON.stringify(snapshot);
     await this.redis.set(this.config.redis.snapshotKey, payload, 'EX', this.config.redis.ttlSeconds);
     await this.redis.publish(this.config.redis.channel, payload);
   }
-
-  private async fetchData(): Promise<unknown> {
-    if (this.config.mock) {
-      if (this.mockData === undefined) this.mockData = MetroResponse.parse(JSON.parse(await readFile(this.config.mockFile, 'utf8')));
-      return this.mockData;
-    }
-    this.controller = new AbortController();
-    const timeout = setTimeout(() => this.controller?.abort(), 3000);
+  private async request(endpoint: string) {
+    const controller = new AbortController(); this.controllers.add(controller);
+    const timeout = setTimeout(() => controller.abort(), 3000);
     try {
-      if (this.deps.fetchData) return await this.deps.fetchData(this.controller.signal);
-      const base = this.config.metroApi.base.replace(/\/?$/, '/');
-      const response = await fetch(new URL('tempoEspera/Estacao/todos', base), {
-        headers: { Accept: 'application/json', Authorization: `Bearer ${this.config.metroApi.key}` },
-        signal: this.controller.signal
-      });
-      if (!response.ok) throw Object.assign(new Error(`Metro API HTTP ${response.status}`), { status: response.status });
-      return await response.json();
-    } finally {
-      clearTimeout(timeout);
-      this.controller = undefined;
-    }
+      if (this.deps.fetchEndpoint) return await this.deps.fetchEndpoint(endpoint, controller.signal);
+      if (this.deps.fetchData && endpoint === 'tempoEspera/Estacao/todos') return await this.deps.fetchData(controller.signal);
+      return await fetchMetro(this.config, endpoint, controller.signal);
+    } finally { clearTimeout(timeout); this.controllers.delete(controller); }
   }
-
+  private async ancillary(now: number) {
+    if (this.config.mock || (this.deps.fetchData && !this.deps.fetchEndpoint)) return;
+    const tasks: Promise<void>[] = [];
+    if (now >= this.nextMetadata) {
+      this.nextMetadata = now + 86400;
+      tasks.push((async () => {
+        try {
+          const raw = z.object({ resposta: z.array(z.object({ stop_id: z.string(), stop_name: z.string(), stop_lat: z.string(), stop_lon: z.string(), stop_url: z.string() })) }).parse(await this.request('infoEstacao/todos'));
+          const records = new Map(raw.resposta.map(s => [s.stop_id,s]));
+          this.metadata = this.metadata.map(station => {
+            const s = records.get(station.id); if (!s) return station;
+            const urls = s.stop_url.replace(/^\[|\]$/g,'').split(',').map(u => u.trim()).filter(u => /^https:\/\/([\w-]+\.)*metrolisboa\.pt\//.test(u));
+            const parsed = MetadataSchema.safeParse({ ...station, name: s.stop_name, lat: Number(s.stop_lat), lon: Number(s.stop_lon), urls });
+            return parsed.success ? parsed.data : station;
+          });
+        } catch { this.nextMetadata = Math.min(this.nextMetadata,now+300); this.log.warn('Station metadata unavailable; using last valid catalog'); }
+      })(),(async () => {
+        try {
+          const raw = z.object({ resposta: z.array(z.object({ id_destino: z.string(), nome_destino: z.string() })) }).parse(await this.request('infoDestinos/todos'));
+          for (const d of raw.resposta) this.destinationNames[d.id_destino] = d.nome_destino;
+        } catch { this.nextMetadata = Math.min(this.nextMetadata,now+300); this.log.warn('Destination metadata unavailable; using last valid catalog'); }
+      })());
+    }
+    if (now >= this.nextStatus) {
+      this.nextStatus = now + 60;
+      tasks.push((async () => {
+        try {
+          const { resposta } = z.object({ resposta: z.record(z.string()) }).parse(await this.request('estadoLinha/todos'));
+          for (const line of lineNames) this.statuses[line] = { ...this.lastSnapshot?.lines[line], status: {
+            message: resposta[line]?.trim() === 'Ok' ? 'Circulação normal' : resposta[line]?.trim() || 'Estado indisponível',
+            summary: resposta[`${line}_curta`] || 'unknown', type: resposta[`tipo_msg_${statusSuffix[line]}`] || '', observedAt: now
+          }} as Snapshot['lines'][typeof line];
+        } catch { this.log.warn('Operator status unavailable; retaining original status timestamp'); }
+      })());
+    }
+    await Promise.all(tasks);
+  }
+  private async arrivals(now: number): Promise<{ data: MetroData; source: Snapshot['source'] }> {
+    if (this.config.mock) {
+      if (!this.replay) this.replay = validateReplay(JSON.parse(await readFile(this.config.mockFile,'utf8')));
+      this.replayStart ??= now;
+      return { data: replayAt(this.replay,this.replayStart,now), source: 'mock' };
+    }
+    if (!this.fallback || now >= this.nextGlobalCheck) {
+      const data = MetroResponse.parse(await this.request('tempoEspera/Estacao/todos'));
+      if (data.resposta.length) { this.emptyCount = 0; this.fallback = false; return { data, source: 'global' }; }
+      this.emptyCount++;
+      if (this.emptyCount < 2) return { data, source: 'global' };
+      this.fallback = true; this.nextGlobalCheck = now + 60;
+    }
+    const responses = await Promise.allSettled(lineNames.map(line => this.request(`tempoEspera/Linha/${lineLabels[line]}`).then(data => MetroResponse.parse(data))));
+    const successful = responses.flatMap(r => r.status === 'fulfilled' ? [r.value] : []);
+    if (!successful.length) throw new Error('All line endpoints unavailable');
+    return { data: { resposta: successful.flatMap(d => d.resposta) }, source: 'lines' };
+  }
   async pollOnce(): Promise<number> {
-    const status = computeServiceStatus(this.deps.now?.() || new Date());
+    const now = this.now();
+    const status = computeServiceStatus(new Date(now * 1000));
     if (!this.config.mock && !status.open) {
-      this.prevState.clear();
-      this.stationStates.clear();
-      this.lastSnapshot = toSnapshot([], { serviceOpen: false });
-      this.lastStationEtas = buildStationEtaSnapshot({ resposta: [] });
-      try { await this.publish(this.lastSnapshot, this.lastStationEtas); }
-      catch { this.log.warn('Unable to refresh closed-service state; retrying'); }
+      this.tracker.reset(); this.emptyCount = 0; this.fallback = false;
+      this.lastSnapshot = this.tracker.update({ resposta: [] }, now, { serviceOpen: false, metadata: this.metadata, statuses: this.statuses });
+      try { await this.publish(this.lastSnapshot); } catch { this.log.warn('Unable to refresh closed-service state; retrying'); }
       this.backoffMs = 0;
-      return Math.max(100, Math.min(status.msUntilOpen, this.config.redis.ttlSeconds * 500));
+      return Math.max(100,Math.min(status.msUntilOpen,this.config.redis.ttlSeconds * 500));
     }
     try {
-      const data = await this.fetchData();
-      const normalized = SnapshotSchema.safeParse(data);
-      let snapshot: Snapshot;
-      let stationEtas: StationEtaSnapshot | undefined;
-      if (normalized.success) {
-        snapshot = { ...normalized.data, serviceOpen: true };
-      } else {
-        const raw = MetroResponse.parse(data);
-        const trains = normalizeTempoEspera(raw, this.prevState, this.stationStates, this.config.dwellSeconds);
-        snapshot = SnapshotSchema.parse(toSnapshot(trains));
-        stationEtas = StationEtaSchema.parse(buildStationEtaSnapshot(raw));
-      }
-      // Commit the last-good pair only after both representations validate.
-      this.lastSnapshot = snapshot;
-      this.lastStationEtas = stationEtas;
-      await this.publish(this.lastSnapshot, this.lastStationEtas);
-      this.backoffMs = 0;
+      const [arrivals] = await Promise.all([this.arrivals(now),this.ancillary(now)]);
+      this.lastSnapshot = SnapshotSchema.parse(this.tracker.update(arrivals.data,this.now(),{ metadata: this.metadata,
+        destinationNames: this.destinationNames, statuses: this.statuses, source: arrivals.source }));
+      await this.publish(this.lastSnapshot); this.backoffMs = 0;
     } catch (error) {
       const code = (error as { status?: number }).status;
       const initial = code === 429 || (code && code >= 500) ? 6000 : 4000;
-      this.backoffMs = this.backoffMs ? Math.min(this.backoffMs * 2, 30000) : initial;
-      // Do not log upstream bodies, credentials or configured URLs.
-      this.log.warn({ status: code, backoffMs: this.backoffMs }, 'Ingest failed; retaining original data timestamps');
+      this.backoffMs = this.backoffMs ? Math.min(this.backoffMs*2,30000) : initial;
+      this.log.warn({ status: code, backoffMs: this.backoffMs },'Ingest failed; retaining original observation timestamps');
       if (this.lastSnapshot) {
-        // The timetable is open even if the first request after opening fails.
-        // Retain the old timestamp so the closed-night data is visibly stale.
         this.lastSnapshot = { ...this.lastSnapshot, serviceOpen: true };
-        try { await this.publish(this.lastSnapshot, this.lastStationEtas); } catch { /* Redis reconnects automatically. */ }
+        try { await this.publish(this.lastSnapshot); } catch { /* Redis reconnects automatically. */ }
       }
     }
-    const jitter = Math.floor(Math.random() * 200) - 100;
-    return Math.max(100, this.config.pollIntervalMs + this.backoffMs + jitter);
+    return Math.max(100,this.config.pollIntervalMs+this.backoffMs+Math.floor(Math.random()*200)-100);
   }
 }

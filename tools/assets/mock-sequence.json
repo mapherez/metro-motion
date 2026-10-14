@@ -1,0 +1,6 @@
+{
+  "kind": "synthetic-network",
+  "provenance": "Deterministic test scenario, not recorded operator telemetry or calibration data",
+  "travelSeconds": 90,
+  "dwellSeconds": 25
+}

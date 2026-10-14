@@ -16,6 +16,11 @@
       "import": "./dist/stations.js",
       "default": "./dist/stations.js"
     },
+    "./metadata": {
+      "types": "./dist/metadata.d.ts",
+      "import": "./dist/metadata.js",
+      "default": "./dist/metadata.js"
+    },
     "./geometry": {
       "types": "./dist/geometry.d.ts",
       "import": "./dist/geometry.js",

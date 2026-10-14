@@ -2,7 +2,8 @@ import Fastify from 'fastify';
 import fastifyStatic from '@fastify/static';
 import path from 'node:path';
 import { existsSync, readFileSync } from 'node:fs';
-import { Snapshot, StationEtaSnapshot, LineNameEnum } from '@metro/shared-types';
+import { Snapshot, LineNameEnum } from '@metro/shared-types';
+import { stationMetadata } from '@metro/station-data/metadata';
 import type { Config } from './config.js';
 import { createRedis, closeRedis, type RedisClient } from './redis.js';
 import { SnapshotStream } from './sse.js';
@@ -44,16 +45,35 @@ export function buildServer(config: Config, options: { redis?: RedisClient; logg
     const line = LineNameEnum.safeParse(req.params.lineId.toLowerCase());
     if (!line.success) return reply.code(404).send({ error: 'Unknown line' });
     let raw: string | null;
-    try { raw = await redis.get(config.redis.stationEtaKey); }
+    try { raw = await redis.get(config.redis.snapshotKey); }
     catch { return reply.code(503).send({ error: 'Redis unavailable' }); }
     if (!raw) return reply.code(204).send();
     try {
-      const data = StationEtaSnapshot.parse(JSON.parse(raw));
-      return reply.header('Cache-Control', 'no-store').send({ line: line.data, t: data.t, stations: data.lines[line.data].stations });
+      const data = Snapshot.parse(JSON.parse(raw));
+      return reply.header('Cache-Control', 'no-store').send({ schemaVersion: 2, line: line.data, t: data.lines[line.data].dataObservedAt, stations: data.lines[line.data].stations });
     } catch {
       app.log.error('Invalid station ETAs in Redis');
       return reply.code(500).send({ error: 'Invalid station ETAs' });
     }
+  });
+
+  app.get<{ Params: { stationId: string } }>('/api/stations/:stationId', async (req, reply) => {
+    const id = req.params.stationId.toUpperCase();
+    const fallback = stationMetadata.find(s => s.id === id);
+    if (!fallback) return reply.code(404).send({ error: 'Unknown station' });
+    let snapshot: import('@metro/shared-types').Snapshot | undefined;
+    let available = true;
+    try {
+      const raw = await redis.get(config.redis.snapshotKey);
+      if (raw) snapshot = Snapshot.parse(JSON.parse(raw));
+    } catch { available = false; }
+    const station = snapshot?.metadata.find(s => s.id === id) ?? fallback;
+    return reply.header('Cache-Control', 'no-store').send({
+      schemaVersion: 2, station, serviceOpen: snapshot?.serviceOpen ?? null, available,
+      lines: station.lines.map(line => ({ line, status: snapshot?.lines[line].status ?? null,
+        arrivals: snapshot?.lines[line].stations.find(s => s.stationId === id)?.arrivals ?? [] })),
+      tiles: config.tiles
+    });
   });
 
   app.get('/api/stream', async (_req, reply) => {
