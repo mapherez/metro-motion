@@ -2,7 +2,7 @@ name: metro-motion
 
 services:
   app:
-    image: ghcr.io/mapherez/metro-motion-app:${APP_IMAGE_TAG:-1.0.1}
+    image: ghcr.io/mapherez/metro-motion-app:${APP_IMAGE_TAG:-1.0.2}
     init: true
     restart: unless-stopped
     ports:
