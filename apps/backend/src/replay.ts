@@ -6,7 +6,7 @@ import {
 } from "@metro/shared-utils";
 import { MetroResponse } from "./metro-api.js";
 
-type Frame = { offsetSeconds: number; data: MetroData };
+type Frame = { offsetSeconds: number; receivedAt?: number; data: MetroData };
 export type Replay = {
   kind?: string;
   travelSeconds?: number;
@@ -33,17 +33,26 @@ export function validateReplay(value: unknown): Replay {
     return { frames: [{ offsetSeconds: 0, data: MetroResponse.parse(value) }] };
   }
   let previous = -1;
+  const frames: Frame[] = [];
   for (const frame of replay.frames) {
     if (
       !Number.isFinite(frame.offsetSeconds) ||
       frame.offsetSeconds < 0 ||
-      frame.offsetSeconds <= previous
+      frame.offsetSeconds <= previous ||
+      (frame.receivedAt !== undefined &&
+        (!Number.isFinite(frame.receivedAt) || frame.receivedAt <= 0))
     )
       throw new Error("Replay offsets must increase");
-    MetroResponse.parse(frame.data);
+    frames.push({
+      offsetSeconds: frame.offsetSeconds,
+      ...(frame.receivedAt === undefined
+        ? {}
+        : { receivedAt: frame.receivedAt }),
+      data: MetroResponse.parse(frame.data),
+    });
     previous = frame.offsetSeconds;
   }
-  return replay;
+  return { ...replay, frames };
 }
 
 export function replayAt(
@@ -98,17 +107,23 @@ export function replayAt(
   const firstValidFrame = frames.find((f) =>
     f.data.resposta.some((r) => parseMetroTime(r.hora) !== null),
   );
-  const firstTime = firstValidFrame
-    ? Math.min(
-        ...firstValidFrame.data.resposta.map(
-          (r) => parseMetroTime(r.hora) ?? Infinity,
-        ),
-      ) - firstValidFrame.offsetSeconds
-    : startedAt;
+  const receivedFrame = frames.find((f) => f.receivedAt !== undefined);
+  // Reception time preserves the actual age of each platform, including
+  // ancient rows mixed into an otherwise live response. Legacy fixtures lack
+  // this clock: anchor their newest observation, never their oldest one.
+  const firstTime = receivedFrame
+    ? receivedFrame.receivedAt! - receivedFrame.offsetSeconds
+    : firstValidFrame
+      ? Math.max(
+          ...firstValidFrame.data.resposta.map(
+            (r) => parseMetroTime(r.hora) ?? -Infinity,
+          ),
+        ) - firstValidFrame.offsetSeconds
+      : startedAt;
   return {
     ...frame.data,
     resposta: frame.data.resposta.map((r) => {
-      const sourceTime = parseMetroTime(r.hora);
+      const sourceTime = parseMetroTime(r.hora, frame.receivedAt);
       return {
         ...r,
         hora:

@@ -72,7 +72,7 @@ test("recorded frames whitelist data fields and never persist credentials or ups
         cais: "RM4",
         hora: formatMetroTime(Date.now() / 1000),
         comboio: "7C",
-        tempoChegada1: "60",
+        tempoChegada1: 60,
         destino: "54",
         Authorization: "Bearer RECORDER_SECRET_SENTINEL",
         extraUrl: "https://secret.invalid/?token=RECORDER_SECRET_SENTINEL",
@@ -98,6 +98,11 @@ test("recorded frames whitelist data fields and never persist credentials or ups
   assert.ok(!content.includes("extraUrl"));
   const first = JSON.parse(content.trim().split("\n")[0]);
   assert.equal(first.data.resposta[0].comboio, "7C");
+  assert.equal(
+    first.data.resposta[0].tempoChegada1,
+    60,
+    "recordings retain numeric ETAs from the real API",
+  );
   assert.ok(first.offsetSeconds >= 0);
   const manifest = JSON.parse(
     await readFile(

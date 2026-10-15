@@ -1,15 +1,25 @@
 # Validação do acompanhamento e da interface
 
-Verificação realizada em 14/10/2026. A API do Metro não fornecia observações
-numéricas frescas; a greve indicada pelo utilizador impede a recolha em
-circulação normal. Não foram feitas gravações reais nem afirmada calibração
-com telemetria real. O cenário mock é explicitamente sintético.
+Verificação realizada em 14 e 15/10/2026. No dia 14, sem previsões atuais,
+a validação usou o cenário mock sintético. No dia 15 foram consultados os
+endpoints oficiais e recolhidas sequências reais, sem credenciais, para
+reproduzir as atualizações e verificar o acompanhamento.
 
 ## Verificações concluídas
 
-- `pnpm test`: build dos cinco packages, 35 testes do backend, 5 do motor
+- `pnpm test`: build dos cinco packages, 42 testes do backend, 5 do motor
   de apresentação do frontend e 12 das ferramentas, incluindo o gravador.
-  Os 52 testes passaram.
+  Os 59 testes passaram.
+- ETAs numéricos e textuais são aceites na fronteira da API. `--`, valores
+  negativos e fracionários continuam sem gerar previsões. A abertura depois
+  do estado noturno recupera com as respostas numéricas reais.
+- Relógios independentes dos cais não substituem a próxima estação por uma
+  estação distante mais recente. Um zero residual numa estação já ultrapassada
+  não faz recuar nem retirar o comboio. Previsões de regresso futuras, mesmo
+  repetidas, não confirmam por si uma inversão da viagem atual.
+- Gravações preservam os tipos originais dos ETAs e a hora de receção. O replay
+  normaliza os dados para o motor e mantém a idade de cada cais, incluindo
+  respostas que misturam registos atuais e antigos.
 - Atualizações nos últimos décimos de segundo preservam uma chegada viável,
   sem impor novamente uma duração mínima de viagem. O limite de velocidade
   é verificado no extremo real da curva, incluindo picos entre amostras.
@@ -44,9 +54,43 @@ com telemetria real. O cenário mock é explicitamente sintético.
   aviso visível e marcadores parados; recuperação devolve dados atuais.
 - Geometria e coordenadas do mapa oficial não foram alteradas.
 
-## Validação real pendente e gravações opcionais
+## Validação com dados reais em 15/10/2026
 
-Quando houver circulação normal e ETAs atuais, observar o movimento na app.
+- O endpoint global e os quatro endpoints de linha responderam com HTTP 200.
+  A primeira consulta global validada devolveu 111 registos e 324 observações
+  numéricas frescas. A falha anterior era a validação exigir texto nos ETAs,
+  embora a API devolva números; entrou no commit `4900e55`.
+- A app local usou o ingestor, API HTTP e SSE reais com dados do operador;
+  apenas o Redis deste preview foi substituído pelo adaptador de testes.
+  A integração Compose verificou separadamente Redis real e dois containers.
+  Não foi alterado nem reiniciado o serviço no homelab.
+- Uma sessão com o acompanhamento corrigido reuniu 197 snapshots em 474,7 s,
+  com 33 comboios na primeira amostra. Foram analisados 6 550 estados de
+  comboios: nenhuma descontinuidade de posição/velocidade nas atualizações
+  da mesma viagem e nenhum excesso de velocidade ou sentido contrário.
+  Registaram-se 99 transições para paragem e 117 mudanças de próxima estação.
+- O Chrome apresentou marcadores em movimento no mapa e na linha vertical;
+  a pausa manteve as posições. O drawer de Alameda mostrou chegadas das duas
+  linhas, localização Leaflet e ligações oficiais. Ligações diretas e fecho
+  também foram verificados com dados reais no Firefox e WebKit, sem erros.
+  O drawer mobile foi corrigido para não sair do viewport com scrollbar fixa.
+- O comando do gravador foi exercitado numa sessão curta real: dois frames
+  utilizáveis, com ETAs numéricos preservados. A conversão e reprodução
+  produziram comboios nas quatro linhas (8/10/8/7 na amostra).
+- As sequências e capturas locais estão em `.test-artifacts/` e
+  `output/playwright/`, ignoradas pelo Git. Os testes de regressão reproduzem
+  os casos encontrados sem depender da API ou destes ficheiros locais.
+
+Limites: a observação é finita e não prova a posição física dos comboios.
+Na sessão analisada, correções de ETA incompatíveis com os limites de
+aceleração deixaram algumas chegadas animadas até cerca de 9 s depois da
+previsão. O motor preserva continuidade em vez de saltar para a estação.
+Safari/iPhone e dispositivos físicos continuam sem teste direto; WebKit e
+layouts emulados não substituem essa verificação. O deploy e a revisão final
+no homelab ficam a cargo do utilizador.
+
+## Gravações opcionais
+
 A animação usa as previsões atuais; não exige gravações prévias nem durações
 constantes entre estações. Se for útil reproduzir algum comportamento,
 gravar uma sequência de duração adequada ao problema, por exemplo:
@@ -67,6 +111,8 @@ a coerência da trajetória com os ETAs. Esta comparação não prova a posiçã
 física exata, pois a API não disponibiliza posições ou velocidades medidas.
 
 As estimativas de viagem/paragem são aprendidas em memória e reconstruídas
-após reiniciar a app; os valores iniciais continuam configuráveis. Os limites
+após reiniciar a app. `DWELL_SECONDS` configura a paragem inicial; na ausência
+de observações anteriores existe uma estimativa inicial de viagem de 90 s.
+Os limites
 de velocidade/aceleração são expressos em intervalos de estações do esquema,
 não em km/h. Nenhuma imagem foi publicada e não foi feito deploy.

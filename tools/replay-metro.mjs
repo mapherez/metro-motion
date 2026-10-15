@@ -13,7 +13,11 @@ const rows = (await readFile(input, "utf8"))
   .map((s) => JSON.parse(s));
 const frames = rows
   .filter((row) => row.data && Array.isArray(row.data.resposta))
-  .map(({ offsetSeconds, data }) => ({ offsetSeconds, data }));
+  .map(({ offsetSeconds, receivedAt, data }) => ({
+    offsetSeconds,
+    receivedAt,
+    data,
+  }));
 if (!frames.length) throw new Error("Recording has no data frames");
 const first = frames[0].offsetSeconds;
 for (const frame of frames)

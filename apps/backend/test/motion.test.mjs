@@ -99,6 +99,48 @@ test("ETA corrections preserve position and velocity, including braking for a lo
     previous = next;
   }
 });
+
+test("asynchronous platform clocks cannot redirect a moving train to a distant fresher station", () => {
+  const tracker = new TrainTracker();
+  const next = (at, eta, extra = {}) =>
+    row(at, eta, {
+      stop_id: "SS",
+      cais: "blue:SS",
+      comboio: "013A",
+      destino: "38",
+      ...extra,
+    });
+  const first = tracker.update(
+    {
+      resposta: [
+        next(t, "103", { stop_id: "CM", cais: "blue:CM" }),
+        next(t - 1, "618"),
+      ],
+    },
+    t + 3,
+  );
+  const original = first.lines.azul.trains[0];
+  const distant = tracker.update({ resposta: [next(t + 4, "609")] }, t + 5);
+  const unchanged = distant.lines.azul.trains[0];
+  assert.equal(unchanged.to, "CM");
+  assert.equal(unchanged.retiringAt, undefined);
+  assert.equal(unchanged.journeyId, original.journeyId);
+  assert.deepEqual(unchanged.segments, original.segments);
+  // The nearest platform now updates, still behind the distant platform's
+  // maximum clock. Its new prediction must nevertheless be processed.
+  const nearby = tracker.update(
+    { resposta: [next(t + 3, "93", { stop_id: "CM", cais: "blue:CM" })] },
+    t + 6,
+  );
+  const updated = nearby.lines.azul.trains[0];
+  assert.equal(updated.observedAt, t + 3);
+  assert.equal(updated.retiringAt, undefined);
+  assert.equal(updated.journeyId, original.journeyId);
+  const before = sampleMotion(unchanged, t + 6),
+    after = sampleMotion(updated, t + 6);
+  close(before.position, after.position);
+  close(before.velocity, after.velocity);
+});
 test("cubic trajectories are monotonic and respect speed and acceleration limits", () => {
   for (const direction of [-1, 1])
     for (const speed of [0, 0.005, 0.02])
@@ -214,6 +256,28 @@ test("station passage remains continuous and stops on an observed arrival", () =
   close(sampleMotion(train(departure), end + 6).position, 3);
   close(sampleMotion(train(departure), end + 6).velocity, 0);
   assert.equal(sampleMotion(train(departure), end + 7).phase, "departing");
+  // The previous platform may publish a new zero before removing the train.
+  // Once the adjacent segment is confirmed, this must not retire or rewind it.
+  const previousZero = tracker.update(
+    {
+      resposta: [
+        row(end + 8, "0"),
+        row(end + 8, "68", { stop_id: "AE", cais: "green:AE:forward" }),
+      ],
+    },
+    end + 8,
+  );
+  assert.equal(train(previousZero).to, "AE");
+  assert.equal(train(previousZero).retiringAt, undefined);
+  assert.equal(train(previousZero).journeyId, train(departure).journeyId);
+  close(
+    sampleMotion(train(previousZero), end + 8).position,
+    sampleMotion(train(departure), end + 8).position,
+  );
+  close(
+    sampleMotion(train(previousZero), end + 8).velocity,
+    sampleMotion(train(departure), end + 8).velocity,
+  );
 });
 test("future return predictions do not duplicate or reverse a train", () => {
   const tracker = new TrainTracker();
@@ -252,6 +316,62 @@ test("reversal at a terminal requires two distinct fresh observations", () => {
   assert.equal(train(confirmed).direction, 1);
   assert.notEqual(train(confirmed).journeyId, train(first).journeyId);
   close(sampleMotion(train(confirmed), t + 6).position, 0);
+});
+
+test("future return predictions cannot reverse a journey away from its terminal after the incoming data expires", () => {
+  const tracker = new TrainTracker();
+  const first = tracker.update({ resposta: [row(t, "0")] }, t);
+  for (const seconds of [31, 34, 38]) {
+    const next = tracker.update(
+      {
+        resposta: [
+          row(t + seconds, "700", {
+            stop_id: "CS",
+            cais: "CS:return",
+            destino: "50",
+          }),
+        ],
+      },
+      t + seconds,
+    );
+    assert.equal(train(next).direction, 1);
+    assert.equal(train(next).journeyId, train(first).journeyId);
+    assert.equal(train(next).phase, "stale");
+    close(sampleMotion(train(next), t + seconds).position, 3);
+  }
+});
+
+test("two future departures at a terminal are not two observations of an imminent reversal", () => {
+  const tracker = new TrainTracker();
+  const incoming = tracker.update(
+    {
+      resposta: [
+        row(t, "0", { stop_id: "TE", destino: "50", cais: "TE:incoming" }),
+      ],
+    },
+    t,
+  );
+  for (const seconds of [31, 34]) {
+    const next = tracker.update(
+      {
+        resposta: [
+          row(t + seconds, "240", { stop_id: "TE", cais: "TE:outgoing" }),
+        ],
+      },
+      t + seconds,
+    );
+    assert.equal(train(next).journeyId, train(incoming).journeyId);
+    assert.equal(train(next).direction, -1);
+  }
+  tracker.update(
+    { resposta: [row(t + 36, "2", { stop_id: "TE", cais: "TE:outgoing" })] },
+    t + 36,
+  );
+  const confirmed = tracker.update(
+    { resposta: [row(t + 38, "0", { stop_id: "TE", cais: "TE:outgoing" })] },
+    t + 38,
+  );
+  assert.equal(train(confirmed).direction, 1);
 });
 test("an intermediate destination preserves established direction at its terminal", () => {
   const tracker = new TrainTracker();
@@ -310,6 +430,45 @@ test("incompatible corrections fade and require two distinct observations before
   assert.notEqual(train(confirmed).journeyId, train(first).journeyId);
   assert.equal(sampleMotion(train(confirmed), t + 6).opacity, 0);
 });
+test("replay normalizes numeric ETAs from real recordings without rewriting the input", () => {
+  const original = {
+    frames: [{ offsetSeconds: 0, data: { resposta: [row(t, 60)] } }],
+  };
+  const replay = validateReplay(original);
+  assert.equal(original.frames[0].data.resposta[0].tempoChegada1, 60);
+  assert.equal(replay.frames[0].data.resposta[0].tempoChegada1, "60");
+  const data = replayAt(replay, t + 100, t + 100);
+  assert.equal(observations(data, t + 100)[0].etaSeconds, 60);
+  const snapshot = new TrainTracker().update(data, t + 100);
+  assert.equal(train(snapshot).etaNext, 60);
+  Snapshot.parse(snapshot);
+});
+
+test("replay preserves reception age when a live response also contains ancient platform clocks", () => {
+  const old = row(t - 86400, "--", { cais: "old", comboio: "34C" });
+  const recent = row(t - 3, 60);
+  const replay = validateReplay({
+    frames: [
+      { offsetSeconds: 0, receivedAt: t, data: { resposta: [old, recent] } },
+    ],
+  });
+  const data = replayAt(replay, t + 100, t + 100);
+  const obs = observations(data, t + 100);
+  assert.equal(obs.length, 1);
+  assert.equal(obs[0].observedAt, t + 97);
+  assert.equal(obs[0].arrivalAt, t + 157);
+  assert.equal(train(new TrainTracker().update(data, t + 100)).etaNext, 57);
+  // Older recordings without reception times still use the newest source
+  // clock; an ancient first row must not shift the whole response into future.
+  const legacy = validateReplay({
+    frames: [{ offsetSeconds: 0, data: { resposta: [old, recent] } }],
+  });
+  assert.equal(
+    observations(replayAt(legacy, t + 100, t + 100), t + 100).length,
+    1,
+  );
+});
+
 test("replay does not freshen a finished recording and synthetic network exercises all directions", () => {
   const recording = validateReplay({
     frames: [

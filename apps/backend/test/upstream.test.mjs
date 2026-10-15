@@ -118,32 +118,57 @@ test("upstream application error codes are failures even with an HTTP 200 envelo
 test("live numeric ETAs coexist with string and unavailable predictions without rejecting the response", () => {
   const data = MetroResponse.parse({
     codigo: "200",
-    resposta: [{
-      ...row(start),
-      comboio: "22C", tempoChegada1: 311,
-      comboio2: "26C", tempoChegada2: "57",
-      comboio3: "28C", tempoChegada3: "--",
-    }],
+    resposta: [
+      {
+        ...row(start),
+        comboio: "22C",
+        tempoChegada1: 311,
+        comboio2: "26C",
+        tempoChegada2: "57",
+        comboio3: "28C",
+        tempoChegada3: "--",
+      },
+    ],
   });
   assert.equal(data.resposta[0].tempoChegada1, "311");
   const arrivals = observations(data, start / 1000);
-  assert.deepEqual(arrivals.map(o => [o.trainId, o.etaSeconds]), [["22C", 311], ["26C", 57]]);
+  assert.deepEqual(
+    arrivals.map((o) => [o.trainId, o.etaSeconds]),
+    [
+      ["22C", 311],
+      ["26C", 57],
+    ],
+  );
 
-  const invalid = MetroResponse.parse({ resposta: [{
-    ...row(start),
-    comboio: "22C", tempoChegada1: -1,
-    comboio2: "26C", tempoChegada2: 1.5,
-    comboio3: "28C", tempoChegada3: 0,
-  }] });
-  assert.deepEqual(observations(invalid, start / 1000).map(o => [o.trainId, o.etaSeconds]), [["28C", 0]]);
+  const invalid = MetroResponse.parse({
+    resposta: [
+      {
+        ...row(start),
+        comboio: "22C",
+        tempoChegada1: -1,
+        comboio2: "26C",
+        tempoChegada2: 1.5,
+        comboio3: "28C",
+        tempoChegada3: 0,
+      },
+    ],
+  });
+  assert.deepEqual(
+    observations(invalid, start / 1000).map((o) => [o.trainId, o.etaSeconds]),
+    [["28C", 0]],
+  );
 });
 
 test("opening recovers from the last closed snapshot when the API returns numeric ETAs", async () => {
-  const redis = new FakeRedis(), config = settings({ mock: false });
+  const redis = new FakeRedis(),
+    config = settings({ mock: false });
   let clock = Date.parse("2026-01-15T06:29:56Z");
   const ingestor = new Ingestor(config, redis, logger, {
     now: () => new Date(clock),
-    fetchData: async () => ({ codigo: "200", resposta: [{ ...row(clock), tempoChegada1: 40 }] }),
+    fetchData: async () => ({
+      codigo: "200",
+      resposta: [{ ...row(clock), tempoChegada1: 40 }],
+    }),
   });
   await ingestor.pollOnce();
   const closed = JSON.parse(await redis.get(config.redis.snapshotKey));

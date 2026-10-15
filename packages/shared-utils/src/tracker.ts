@@ -1,4 +1,4 @@
-import { lineNames, lineOrder } from "@metro/station-data";
+import { destinos, lineNames, lineOrder } from "@metro/station-data";
 import { stationMetadata } from "@metro/station-data/metadata";
 import type {
   LineName,
@@ -25,7 +25,7 @@ type DirectedObservation = Observation & { direction: -1 | 1 };
 export class TrainTracker {
   private platforms = new Map<string, MetroRow>();
   private trains = new Map<string, Train>();
-  private groupClocks = new Map<string, number>();
+  private groupVersions = new Map<string, string>();
   private pending = new Map<string, Pending>();
   private durations = new Map<string, number[]>();
   private dwellDurations = new Map<LineName, number[]>();
@@ -39,7 +39,7 @@ export class TrainTracker {
   reset() {
     this.platforms.clear();
     this.trains.clear();
-    this.groupClocks.clear();
+    this.groupVersions.clear();
     this.pending.clear();
     this.stationSeen.clear();
   }
@@ -154,17 +154,35 @@ export class TrainTracker {
         (a, b) => a.arrivalAt - b.arrivalAt || b.observedAt - a.observedAt,
       );
       const previous = this.trains.get(key);
-      const previousClock = this.groupClocks.get(key) ?? -Infinity;
-      const groupClock = Math.max(...list.map((o) => o.observedAt));
-      if (previous && groupClock <= previousClock) continue;
-      this.groupClocks.set(key, groupClock);
+      // Each platform has its own source clock. A maximum timestamp hides a
+      // later update to the nearest platform when a distant one is already
+      // ahead. Deduplicate the complete set of platform versions instead.
+      const version = list
+        .map(
+          (o) =>
+            `${o.platform}:${o.stationId}:${o.destinationId}:${o.observedAt}`,
+        )
+        .sort()
+        .join("|");
+      if (previous && this.groupVersions.get(key) === version) continue;
+      this.groupVersions.set(key, version);
       // An opposite-direction return may already be listed. Stay on the active
       // trip while it still has observations; do not flip to a future departure.
       const active = previous
         ? list.filter(
             (o) =>
               o.direction === previous.direction &&
-              o.destinationId === previous.destinationId,
+              o.destinationId === previous.destinationId &&
+              // A platform can retain a fresh zero after this train's next
+              // segment was confirmed. It must not pull the trip back to a
+              // station whose passage has already been established.
+              !(
+                o.arrivalAt <= now &&
+                (lineOrder[o.line].indexOf(o.stationId) -
+                  lineOrder[o.line].indexOf(previous.to)) *
+                  previous.direction <
+                  0
+              ),
           )
         : [];
       let candidate = active[0] ?? list[0];
@@ -202,9 +220,24 @@ export class TrainTracker {
               previous.direction >=
             -1e-8,
         );
-        const freshAhead = ahead.find((o) => o.observedAt > previousClock);
-        if (freshAhead || ahead.length) {
-          candidate = freshAhead ?? ahead[0];
+        const passed =
+          (targetIndex - current!.position) * previous.direction < -1e-8;
+        const atStop =
+          Math.abs(targetIndex - current!.position) < 0.015 &&
+          candidate.arrivalAt <= now;
+        // A new clock several stations away says nothing about passage at
+        // the current station. Only advance from a stop to its adjacent stop,
+        // or discard a prediction whose station has already been passed.
+        const nextStop = atStop
+          ? ahead.find(
+              (o) =>
+                route.indexOf(o.stationId) ===
+                  targetIndex + previous.direction &&
+                o.observedAt > previous.observedAt,
+            )
+          : undefined;
+        if (nextStop || (passed && ahead.length)) {
+          candidate = nextStop ?? ahead[0];
           targetIndex = route.indexOf(candidate.stationId);
         }
       }
@@ -213,6 +246,30 @@ export class TrainTracker {
         !!previous &&
         (candidate.direction !== previous.direction ||
           candidate.destinationId !== previous.destinationId);
+      if (previous && candidate.direction !== previous.direction) {
+        const terminalId =
+          (options.metadata ?? stationMetadata).find(
+            (station) => station.name === previous.dest,
+          )?.id ?? destinos[previous.destinationId ?? ""]?.terminal;
+        const terminalIndex = terminalId ? route.indexOf(terminalId) : -1;
+        const atTerminal =
+          terminalIndex >= 0 &&
+          Math.abs(current!.position - terminalIndex) < 0.15;
+        const imminent =
+          targetIndex === terminalIndex
+            ? candidate.arrivalAt <= now + 5
+            : targetIndex === terminalIndex + candidate.direction &&
+              candidate.arrivalAt - now <=
+                this.duration(
+                  candidate.line,
+                  route[terminalIndex],
+                  candidate.stationId,
+                );
+        // Two updates to a future return are still not evidence that the
+        // current journey has reached its terminal and reversed. Keep its
+        // last trajectory (and normal staleness limit) until compatible.
+        if (!atTerminal || !imminent) continue;
+      }
       const farCorrection =
         !!previous &&
         (previous.retiringAt !== undefined ||
@@ -368,7 +425,7 @@ export class TrainTracker {
       if (now - train.observedAt > 120) {
         this.trains.delete(key);
         this.pending.delete(key);
-        this.groupClocks.delete(key);
+        this.groupVersions.delete(key);
         this.stationSeen.delete(key);
         continue;
       }

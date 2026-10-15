@@ -159,7 +159,9 @@ test("an incompatible server correction fades the displayed trajectory without a
   engine.ingestSnapshot(tracker.update({ resposta: [row(2, 100)] }, epoch + 2));
   elapsed = 5.5;
   const before = engine.renderedMotion(train());
-  const incompatible = { ...row(4, 0), stop_id: "CG", cais: "CG:forward" };
+  // A new positive prediction behind the train is incompatible. A residual
+  // zero at an already-passed platform is deliberately ignored by the tracker.
+  const incompatible = { ...row(4, 10), stop_id: "CG", cais: "CG:forward" };
   engine.ingestSnapshot(
     tracker.update({ resposta: [incompatible] }, epoch + 4),
   );

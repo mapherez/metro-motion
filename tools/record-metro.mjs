@@ -68,7 +68,10 @@ export async function record(options) {
       throw Object.assign(new Error("Metro request failed"), {
         status: response.status,
       });
-    const raw = MetroResponse.parse(await response.json());
+    const raw = await response.json();
+    MetroResponse.parse(raw);
+    // Preserve the provider's field types in the recording. Normalizing them
+    // here would hide contract differences such as numeric ETAs in replays.
     // Only data fields are persisted. Never record URLs, headers, environment,
     // HTTP bodies outside the schema, tokens or exception messages.
     const fields = [
@@ -114,7 +117,8 @@ export async function record(options) {
       receivedAt,
       source,
       data,
-      freshObservations: observations(data, receivedAt).length,
+      freshObservations: observations(MetroResponse.parse(data), receivedAt)
+        .length,
     };
   };
   try {
