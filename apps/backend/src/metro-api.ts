@@ -1,6 +1,11 @@
 import { z } from "zod";
 import type { Config } from "./config.js";
 
+// Live predictions are JSON numbers; unavailable predictions can be "--".
+// Normalize only at the API boundary, keeping missing/invalid ETAs subject to
+// the shared strict ETA parser instead of rejecting every row in the response.
+const MetroEta = z.union([z.string(), z.number()]).transform(String).optional();
+
 export const MetroResponse = z
   .object({
     codigo: z.union([z.string(), z.number()]).optional(),
@@ -12,11 +17,11 @@ export const MetroResponse = z
           hora: z.string(),
           destino: z.string().optional(),
           comboio: z.string().optional(),
-          tempoChegada1: z.string().optional(),
+          tempoChegada1: MetroEta,
           comboio2: z.string().optional(),
-          tempoChegada2: z.string().optional(),
+          tempoChegada2: MetroEta,
           comboio3: z.string().optional(),
-          tempoChegada3: z.string().optional(),
+          tempoChegada3: MetroEta,
           sairServico: z.union([z.string(), z.number()]).optional(),
           UT: z.union([z.string(), z.number()]).optional(),
         })
