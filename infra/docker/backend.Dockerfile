@@ -23,7 +23,7 @@ ENV NODE_ENV=production \
 COPY --from=build --chown=node:node /app/deploy ./
 COPY --from=build --chown=node:node /app/apps/frontend/dist ./frontend
 COPY --chown=node:node infra/certs/metro-ca-bundle.pem ./certs/metro-ca-bundle.pem
-COPY --chown=node:node tools/assets/tempoEspera_Estacao_todos.json ./fixtures/metro.json
+COPY --chown=node:node tools/assets/mock-sequence.json ./fixtures/metro.json
 USER node
 EXPOSE 8080
 CMD ["node", "dist/index.js"]

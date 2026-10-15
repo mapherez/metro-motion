@@ -1,204 +1,132 @@
+import { useEffect } from "react";
+import { BrowserRouter, Route, Routes, useLocation } from "react-router-dom";
+import { Snapshot } from "@metro/shared-types";
+import { API_BASE } from "./api";
+import { adaptiveView, saved, useSnapshotStore } from "./state";
 import {
-  type Dispatch,
-  type ReactNode,
-  type SetStateAction,
-  useCallback,
-  useEffect,
-  useMemo,
-  useState
-} from "react";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
-import { API_BASE, STALE_AFTER_SECONDS } from "./api";
-import { useSnapshotStore } from "./state";
+  ingestSnapshot,
+  startMotionEngine,
+  synchronizeClock,
+} from "./motion-engine";
 import { Shell } from "./Shell";
 import { Home } from "./views/Home";
-import { About } from "./views/About";
 import { LineView } from "./views/LineView";
-import { ShellContext, ThemeMode } from "./shell-context";
-import type { Snapshot } from "@metro/shared-types";
+import { About } from "./views/About";
+import { StationDrawer } from "./components/StationDrawer";
 
-const THEME_STORAGE_KEY = "metro-theme";
-
-function resolveInitialTheme(): ThemeMode {
-  if (typeof window === "undefined") {
-    return "light";
-  }
-  const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
-  if (stored === "light" || stored === "dark") {
-    return stored;
-  }
-  const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-  return prefersDark ? "dark" : "light";
-}
-
-function applyTheme(mode: ThemeMode) {
-  if (typeof document === "undefined") return;
-  const root = document.documentElement;
-  root.dataset.theme = mode;
-  root.style.colorScheme = mode;
-}
-
-export function App() {
-  const snapshot = useSnapshotStore((s) => s.snapshot);
-  const setSnapshot = useSnapshotStore((s) => s.setSnapshot);
-
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [sinceText, setSinceText] = useState("");
-  const [serviceOpen, setServiceOpen] = useState<boolean | null>(null);
-  const [theme, setTheme] = useState<ThemeMode>(() => {
-    const initial = resolveInitialTheme();
-    applyTheme(initial);
-    return initial;
-  });
-
-  const toggleTheme = useCallback(() => {
-    setTheme((prev) => (prev === "dark" ? "light" : "dark"));
-  }, []);
-
+function Connection() {
+  const theme = useSnapshotStore((s) => s.theme);
   useEffect(() => {
-    applyTheme(theme);
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(THEME_STORAGE_KEY, theme);
-    }
+    document.documentElement.dataset.theme = theme;
+    document.documentElement.style.colorScheme = theme;
   }, [theme]);
-
-  const contextValue = useMemo(
-    () => ({
-      theme,
-      setTheme,
-      toggleTheme,
-      snapshot,
-      serviceOpen,
-      sinceText,
-      loading,
-      error,
-    }),
-    [theme, snapshot, serviceOpen, sinceText, loading, error, toggleTheme]
-  );
-
-  return (
-    <ShellContext.Provider value={contextValue}>
-      <BrowserRouter>
-        <SnapshotSync
-          apiBase={API_BASE}
-          setSnapshot={setSnapshot}
-          setServiceOpen={setServiceOpen}
-          setError={setError}
-          setLoading={setLoading}
-          snapshot={snapshot}
-          serviceOpen={serviceOpen}
-          setSinceText={setSinceText}
-        >
-          <Routes>
-            <Route element={<Shell />}>
-              <Route index element={<Home />} />
-              <Route path="about" element={<About />} />
-              <Route path="line/:id" element={<LineView />} />
-            </Route>
-          </Routes>
-        </SnapshotSync>
-      </BrowserRouter>
-    </ShellContext.Provider>
-  );
-}
-
-type SnapshotSyncProps = {
-  apiBase: string;
-  setSnapshot: (snapshot: Snapshot | null) => void;
-  setServiceOpen: Dispatch<SetStateAction<boolean | null>>;
-  setError: Dispatch<SetStateAction<string | null>>;
-  setLoading: Dispatch<SetStateAction<boolean>>;
-  snapshot: Snapshot | null;
-  serviceOpen: boolean | null;
-  setSinceText: Dispatch<SetStateAction<string>>;
-  children: ReactNode;
-};
-
-function SnapshotSync({
-  apiBase,
-  setSnapshot,
-  setServiceOpen,
-  setError,
-  setLoading,
-  snapshot,
-  serviceOpen,
-  setSinceText,
-  children
-}: SnapshotSyncProps) {
   useEffect(() => {
-    let active = true;
+    const stop = startMotionEngine();
+    const reduced = matchMedia("(prefers-reduced-motion: reduce)");
+    const layout = matchMedia("(min-width: 1200px) and (pointer: fine)");
+    const systemTheme = matchMedia("(prefers-color-scheme: dark)");
+    const changeReduced = () =>
+      useSnapshotStore.setState({ reducedMotion: reduced.matches });
+    const changeLayout = () => {
+      if (!saved("metro-view"))
+        useSnapshotStore.setState({ view: adaptiveView() });
+    };
+    const changeTheme = () => {
+      if (!saved("metro-theme"))
+        useSnapshotStore.setState({
+          theme: systemTheme.matches ? "dark" : "light",
+        });
+    };
+    reduced.addEventListener("change", changeReduced);
+    layout.addEventListener("change", changeLayout);
+    systemTheme.addEventListener("change", changeTheme);
     const controller = new AbortController();
-    async function loadNow() {
-      setLoading(true);
-      setError(null);
-      try {
-        const res = await fetch(`${apiBase}/now`, { signal: controller.signal });
-        if (!active) return;
-        if (res.status === 204) {
-          setSnapshot(null);
-          setServiceOpen(null);
+    let active = true;
+    const requestStart = performance.now();
+    void fetch(`${API_BASE}/now`, { signal: controller.signal })
+      .then(async (response) => {
+        if (active)
+          synchronizeClock(
+            Number(response.headers.get("X-Server-Time")) +
+              (performance.now() - requestStart) / 2000,
+          );
+        if (response.status === 204) {
+          if (active) useSnapshotStore.setState({ loading: false });
           return;
         }
-        if (!res.ok) {
-          throw new Error(`HTTP ${res.status}`);
-        }
-        const json = await res.json();
-        setSnapshot(json);
-        setServiceOpen(json?.serviceOpen === false ? false : true);
-      } catch (err: any) {
-        if (!active) return;
-        setError(err?.message ?? "Failed to load snapshot");
-        setServiceOpen(null);
-      } finally {
-        if (active) {
-          setLoading(false);
-        }
+        if (!response.ok) throw new Error();
+        const parsed = Snapshot.parse(await response.json());
+        if (active) ingestSnapshot(parsed);
+      })
+      .catch(() => {
+        if (active)
+          useSnapshotStore.setState({
+            loading: false,
+            error: "Não foi possível obter os dados. A tentar novamente…",
+          });
+      });
+    const stream = new EventSource(`${API_BASE}/stream`);
+    stream.onopen = () => useSnapshotStore.setState({ connected: true });
+    stream.onmessage = (event) => {
+      try {
+        ingestSnapshot(Snapshot.parse(JSON.parse(event.data)));
+      } catch {
+        useSnapshotStore.setState({
+          error: "Recebemos dados inválidos. A aguardar atualização.",
+        });
       }
-    }
-    loadNow();
+    };
+    stream.onerror = () =>
+      useSnapshotStore.setState({
+        connected: false,
+        error: "Ligação interrompida. A tentar novamente…",
+      });
     return () => {
       active = false;
       controller.abort();
+      stream.close();
+      stop();
+      reduced.removeEventListener("change", changeReduced);
+      layout.removeEventListener("change", changeLayout);
+      systemTheme.removeEventListener("change", changeTheme);
     };
-  }, [apiBase, setSnapshot, setServiceOpen, setError, setLoading]);
-
-  useEffect(() => {
-    const es = new EventSource(`${apiBase}/stream`);
-    es.onmessage = (event) => {
-      try {
-        const json = JSON.parse(event.data);
-        setSnapshot(json);
-        setServiceOpen(json?.serviceOpen === false ? false : true);
-        setError(null);
-      } catch (err) {
-        console.error("Failed to parse SSE payload", err);
-      }
-    };
-    es.onerror = () => {
-      setError((prev) => prev ?? "Realtime disconnected, retrying...");
-    };
-    return () => {
-      es.close();
-    };
-  }, [apiBase, setSnapshot, setServiceOpen, setError]);
-
-  useEffect(() => {
-    if (!snapshot || serviceOpen === false) {
-      setSinceText("");
-      return;
-    }
-    const update = () => {
-      const ageMs = Date.now() - snapshot.t * 1000;
-      const seconds = Math.max(0, Math.floor(ageMs / 1000));
-      setSinceText(seconds > STALE_AFTER_SECONDS ? `${seconds}s — dados desatualizados` : `${seconds}s ago`);
-    };
-    update();
-    const id = window.setInterval(update, 1000);
-    return () => {
-      window.clearInterval(id);
-    };
-  }, [snapshot, serviceOpen, setSinceText]);
-
-  return <>{children}</>;
+  }, []);
+  return null;
+}
+function Screens() {
+  const location = useLocation();
+  const state = location.state as {
+    background?: typeof location;
+    drawer?: boolean;
+  } | null;
+  const stationMatch = location.pathname.match(/^\/station\/([^/]+)\/?$/);
+  const background = stationMatch
+    ? (state?.background ?? { ...location, pathname: "/" })
+    : location;
+  return (
+    <>
+      <Routes location={background}>
+        <Route element={<Shell />}>
+          <Route index element={<Home />} />
+          <Route path="line/:id" element={<LineView />} />
+          <Route path="about" element={<About />} />
+          <Route path="*" element={<Home />} />
+        </Route>
+      </Routes>
+      {stationMatch && (
+        <StationDrawer
+          stationId={decodeURIComponent(stationMatch[1])}
+          hasBackground={!!state?.background}
+        />
+      )}
+    </>
+  );
+}
+export function App() {
+  return (
+    <BrowserRouter>
+      <Connection />
+      <Screens />
+    </BrowserRouter>
+  );
 }

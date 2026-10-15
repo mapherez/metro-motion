@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "prebuild": "pnpm -w -r --filter @metro/shared-types --filter @metro/station-data build",
+    "prebuild": "pnpm -w -r --filter @metro/shared-types --filter @metro/station-data --filter @metro/shared-utils build",
     "build": "tsc -b && vite build",
     "preview": "vite preview --port 5174",
     "lint": "tsc --noEmit"
@@ -13,7 +13,9 @@
   "dependencies": {
     "@heroicons/react": "^2.2.0",
     "@metro/shared-types": "workspace:*",
+    "@metro/shared-utils": "workspace:*",
     "@metro/station-data": "workspace:*",
+    "leaflet": "1.9.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^7.9.1",
@@ -23,6 +25,7 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4.1.13",
     "@tailwindcss/vite": "^4.1.13",
+    "@types/leaflet": "1.9.21",
     "@types/node": "^20.12.7",
     "@types/react": "^18.2.74",
     "@types/react-dom": "^18.2.24",

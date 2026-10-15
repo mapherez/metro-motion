@@ -26,8 +26,17 @@ test('stream ignores invalid payloads and bounds slow-client buffering', async (
   assert.equal(healthy.frames.length, 1);
   slow.acceptsWrites = false;
   await redis.publish('events', JSON.stringify(toSnapshot([])));
-  assert.equal(slow.destroyed, true);
+  assert.equal(slow.destroyed, false, 'one bounded snapshot is allowed to drain');
   assert.equal(healthy.frames.length, 2);
+  await redis.publish('events', JSON.stringify(toSnapshot([])));
+  assert.equal(slow.destroyed, true, 'a second frame while blocked disconnects the slow reader');
+  const draining = new Client();
+  draining.acceptsWrites = false;
+  stream.add(draining, null);
+  draining.emit('drain');
+  draining.acceptsWrites = true;
+  await redis.publish('events', JSON.stringify(toSnapshot([])));
+  assert.equal(draining.destroyed, false);
   await stream.close();
   assert.equal(healthy.destroyed, true);
   assert.equal(redis.shared.clients.size, 1);

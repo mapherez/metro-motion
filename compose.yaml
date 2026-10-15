@@ -19,6 +19,8 @@ services:
       DWELL_SECONDS: ${DWELL_SECONDS:-25}
       REDIS_TTL_SECONDS: ${REDIS_TTL_SECONDS:-15}
       FRONTEND_DIST_DIR: /app/frontend
+      MAP_TILE_URL: ${MAP_TILE_URL:-}
+      MAP_TILE_ATTRIBUTION: ${MAP_TILE_ATTRIBUTION:-}
     depends_on:
       redis:
         condition: service_healthy
