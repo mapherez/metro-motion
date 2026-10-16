@@ -2,6 +2,7 @@ name: metro-motion
 
 services:
   app:
+    container_name: metro-motion-app
     image: ghcr.io/mapherez/metro-motion-app:${APP_IMAGE_TAG:-1.0.2}
     init: true
     restart: unless-stopped
@@ -38,6 +39,7 @@ services:
         max-file: "3"
 
   redis:
+    container_name: metro-motion-redis
     image: redis:8-alpine
     command: ["redis-server", "--save", "", "--appendonly", "no"]
     tmpfs:
