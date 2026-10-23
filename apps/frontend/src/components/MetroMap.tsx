@@ -219,10 +219,19 @@ export function MetroMap() {
                     <text
                       x={station.labelX ?? (station.cx ?? 0) + 8}
                       y={station.labelY ?? (station.cy ?? 0) - 8}
+                      textAnchor={station.labelAnchor ?? "start"}
                       fontSize={10}
                       fill="var(--metro-label)"
                     >
-                      {station.name}
+                      {(station.labelLines ?? [station.name]).map((text, index) => (
+                        <tspan
+                          key={index}
+                          x={station.labelX ?? (station.cx ?? 0) + 8}
+                          dy={index === 0 ? 0 : 12}
+                        >
+                          {text}
+                        </tspan>
+                      ))}
                     </text>
                   </g>
                 );
