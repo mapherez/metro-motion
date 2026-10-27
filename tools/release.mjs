@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { createInterface } from 'node:readline/promises';
 import { pathToFileURL } from 'node:url';
 import path from 'node:path';
-import { assertVersionIncrease, normalizeVersion, readVersion, repoRoot, updateVersionFiles } from './version.mjs';
+import { assertVersionIncrease, checkVersionFiles, normalizeVersion, readVersion, repoRoot, updateVersionFiles } from './version.mjs';
 
 function git(root, args, { allowFailure = false, inherit = false } = {}) {
   const result = spawnSync('git', args, {
@@ -40,10 +40,8 @@ export async function release({ root = repoRoot, version, dryRun = false, log = 
   for (const file of ['.github/workflows/ci.yml', '.github/workflows/docker-app.yml']) {
     await readFile(path.join(root, file), 'utf8');
   }
-  // Pre-validate version placeholders even for dry-runs.
-  const compose = await readFile(path.join(root, 'compose.yaml'), 'utf8');
-  const example = await readFile(path.join(root, '.env.example'), 'utf8');
-  if (!/APP_IMAGE_TAG:-[^}]+/.test(compose) || !/^APP_IMAGE_TAG=.*$/m.test(example)) throw new Error('Configuração de versão incompleta.');
+  // Validate deployment defaults even for dry-runs; releases keep latest.
+  await checkVersionFiles(root);
   log(`${current} → ${next}; commit + tag ${tag} → origin/main`);
   log('Inclui todas as alterações e novos ficheiros não ignorados pelo Git.');
   if (dryRun) {

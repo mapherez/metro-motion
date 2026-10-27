@@ -36,8 +36,8 @@ async function fixture(t) {
   git(root, 'config', 'protocol.file.allow', 'always');
   await mkdir(path.join(root, '.github', 'workflows'), { recursive: true });
   await writeFile(path.join(root, 'package.json'), JSON.stringify({ name: 'test', version: '1.0.0' }) + '\n');
-  await writeFile(path.join(root, 'compose.yaml'), 'image: ghcr.io/test/metro-motion-app:${APP_IMAGE_TAG:-1.0.0}\n');
-  await writeFile(path.join(root, '.env.example'), 'APP_IMAGE_TAG=1.0.0\n');
+  await writeFile(path.join(root, 'compose.yaml'), 'image: ghcr.io/test/metro-motion-app:${APP_IMAGE_TAG:-latest}\n');
+  await writeFile(path.join(root, '.env.example'), 'APP_IMAGE_TAG=latest\n');
   await writeFile(path.join(root, '.gitignore'), '.env\n');
   for (const file of ['ci.yml', 'docker-app.yml']) await writeFile(path.join(root, '.github', 'workflows', file), 'name: Test\n');
   await writeFile(path.join(root, 'old.txt'), 'delete me\n');
@@ -59,14 +59,18 @@ test('version validation, default and CLI options', async t => {
   assert.equal(await readVersion(root), '1.0.0');
 });
 
-test('release commits all non-ignored changes, updates version files and pushes branch plus tag', async t => {
+test('release updates the project version, preserves latest and pushes all non-ignored changes plus tag', async t => {
   const { root, remote } = await fixture(t);
+  const compose = await readFile(path.join(root, 'compose.yaml'), 'utf8');
+  const example = await readFile(path.join(root, '.env.example'), 'utf8');
   await writeFile(path.join(root, 'new.txt'), 'include me\n');
   await writeFile(path.join(root, '.env'), 'METRO_API_KEY=fake-test-value\n');
   await rm(path.join(root, 'old.txt'));
   const result = await release({ root, version: 'v1.1.0', log() {} });
   assert.equal(result.tag, 'v1.1.0');
   assert.equal(await checkVersionFiles(root), '1.1.0');
+  assert.equal(await readFile(path.join(root, 'compose.yaml'), 'utf8'), compose);
+  assert.equal(await readFile(path.join(root, '.env.example'), 'utf8'), example);
   assert.equal(git(remote, 'rev-parse', 'main'), result.commit);
   assert.equal(git(remote, 'rev-parse', 'v1.1.0^{}'), result.commit);
   const paths = git(remote, 'ls-tree', '-r', '--name-only', 'main').split('\n');
@@ -159,6 +163,11 @@ test('GHCR metadata is versioned, lowercase and tied to the checked-out release 
   assert.equal(metadata.image, 'ghcr.io/mapherez/metro-motion-app');
   assert.ok(metadata.tags.includes(':1.2.3'));
   assert.ok(metadata.tags.includes(`:sha-${sha}`));
+  assert.ok(metadata.tags.split(',').includes(`${metadata.image}:latest`));
+  const main = imageMetadata({ repository: 'org/repo', sha, ref: 'refs/heads/main', version: '1.2.3' });
+  assert.ok(main.tags.split(',').includes(`${main.image}:latest`));
+  const feature = imageMetadata({ repository: 'org/repo', sha, ref: 'refs/heads/feature', version: '1.2.3' });
+  assert.ok(!feature.tags.split(',').includes(`${feature.image}:latest`));
   assert.throws(() => imageMetadata({ repository: 'org/repo', sha, ref: 'refs/tags/v1.2.4', version: '1.2.3' }), /tag/);
   assert.throws(() => imageMetadata({ repository: 'org/repo\nBAD=value', sha, version: '1.2.3' }));
   assert.equal(githubRepository('https://github.com/mapherez/metro-motion.git'), 'mapherez/metro-motion');

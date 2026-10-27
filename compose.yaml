@@ -3,7 +3,7 @@ name: metro-motion
 services:
   app:
     container_name: metro-motion-app
-    image: ghcr.io/mapherez/metro-motion-app:${APP_IMAGE_TAG:-1.0.3}
+    image: ghcr.io/mapherez/metro-motion-app:${APP_IMAGE_TAG:-latest}
     init: true
     restart: unless-stopped
     ports:

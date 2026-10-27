@@ -9,7 +9,9 @@ export function imageMetadata({ repository, sha, ref, version }) {
   if (!/^[a-f0-9]{40}$/.test(sha || '')) throw new Error('Invalid GITHUB_SHA');
   if (ref?.startsWith('refs/tags/') && ref !== `refs/tags/v${version}`) throw new Error('A tag deve coincidir com a versão do package.json.');
   const image = `ghcr.io/${repository.toLowerCase()}-app`;
-  return { image, version, tags: `${image}:${version},${image}:sha-${sha}` };
+  const tags = [`${image}:${version}`, `${image}:sha-${sha}`];
+  if (ref === 'refs/heads/main' || ref === `refs/tags/v${version}`) tags.push(`${image}:latest`);
+  return { image, version, tags: tags.join(',') };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {

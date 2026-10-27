@@ -31,28 +31,19 @@ export async function checkVersionFiles(root = repoRoot) {
   const version = await readVersion(root);
   const compose = await readFile(path.join(root, 'compose.yaml'), 'utf8');
   const example = await readFile(path.join(root, '.env.example'), 'utf8');
-  if (!compose.includes(`APP_IMAGE_TAG:-${version}`) || !new RegExp(`^APP_IMAGE_TAG=${version.replaceAll('.', '\\.')}\r?$`, 'm').test(example)) {
-    throw new Error('package.json, compose.yaml e .env.example devem ter a mesma versão. Usa pnpm release.');
+  if (!compose.includes('${APP_IMAGE_TAG:-latest}') || !/^APP_IMAGE_TAG=latest\r?$/m.test(example)) {
+    throw new Error('compose.yaml e .env.example devem usar APP_IMAGE_TAG com o valor latest.');
   }
   return version;
 }
 
 export async function updateVersionFiles(root, version) {
   version = normalizeVersion(version);
-  const files = ['package.json', 'compose.yaml', '.env.example'];
-  const previous = await Promise.all(files.map(file => readFile(path.join(root, file), 'utf8')));
-  const pkg = JSON.parse(previous[0]);
+  await checkVersionFiles(root);
+  const file = path.join(root, 'package.json');
+  const pkg = JSON.parse(await readFile(file, 'utf8'));
   pkg.version = version;
-  if (!/APP_IMAGE_TAG:-[^}]+/.test(previous[1]) || !/^APP_IMAGE_TAG=.*$/m.test(previous[2])) {
-    throw new Error('Não encontrei a configuração da versão no Compose/exemplo.');
-  }
-  const updated = [
-    JSON.stringify(pkg, null, 2) + '\n',
-    previous[1].replace(/APP_IMAGE_TAG:-[^}]+/, `APP_IMAGE_TAG:-${version}`),
-    previous[2].replace(/^APP_IMAGE_TAG=.*$/m, `APP_IMAGE_TAG=${version}`)
-  ];
-  // Calculate/validate all replacements before modifying any file.
-  for (let i = 0; i < files.length; i++) await writeFile(path.join(root, files[i]), updated[i]);
+  await writeFile(file, JSON.stringify(pkg, null, 2) + '\n');
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
