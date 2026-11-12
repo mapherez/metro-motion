@@ -1,4 +1,4 @@
-FROM node:24-bookworm-slim AS build
+FROM node:26-bookworm-slim AS build
 WORKDIR /app
 ENV TURBO_TELEMETRY_DISABLED=1
 # Pin pnpm without relying on Corepack downloads/signature changes at runtime.
@@ -14,7 +14,7 @@ COPY . .
 RUN pnpm build && pnpm --filter @metro/backend test
 RUN pnpm --filter @metro/backend deploy --prod /app/deploy
 
-FROM node:24-bookworm-slim AS runner
+FROM node:26-bookworm-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production \
     NODE_EXTRA_CA_CERTS=/app/certs/metro-ca-bundle.pem \
