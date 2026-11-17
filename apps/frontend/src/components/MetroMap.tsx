@@ -24,30 +24,20 @@ function MapTrain({
       subscribeMotion((at) => {
         if (!ref.current || !geometry) return;
         const sample = renderedMotion(train, at),
-          p = Math.max(
-            0,
-            Math.min(geometry.anchors.length - 1, sample.position),
-          );
+          p = Math.max(0, Math.min(geometry.anchors.length - 1, sample.position));
         const index = Math.floor(p),
           end = Math.min(index + 1, geometry.anchors.length - 1);
         const s =
-          geometry.anchors[index] +
-          (geometry.anchors[end] - geometry.anchors[index]) * (p - index);
+          geometry.anchors[index] + (geometry.anchors[end] - geometry.anchors[index]) * (p - index);
         const point = geometry.path.getPointAtLength(s),
           a = geometry.path.getPointAtLength(Math.max(0, s - 2)),
           b = geometry.path.getPointAtLength(Math.min(geometry.length, s + 2));
         const forward =
-          (geometry.anchors[end] -
-            geometry.anchors[Math.max(0, index - Number(end === index))]) *
+          (geometry.anchors[end] - geometry.anchors[Math.max(0, index - Number(end === index))]) *
             train.direction >=
           0;
-        const angle =
-          (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI +
-          (forward ? 0 : 180);
-        ref.current.setAttribute(
-          "transform",
-          `translate(${point.x},${point.y}) rotate(${angle})`,
-        );
+        const angle = (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI + (forward ? 0 : 180);
+        ref.current.setAttribute("transform", `translate(${point.x},${point.y}) rotate(${angle})`);
         ref.current.style.opacity = String(sample.opacity);
         ref.current.dataset.phase = sample.phase;
       }),
@@ -89,22 +79,13 @@ function MapTrain({
       />
       <rect x={-5.5} y={-3} width={3.5} height={6} rx={1} fill="#fff" />
       <rect x={-1} y={-3} width={3.5} height={6} rx={1} fill="#fff" />
-      <circle
-        cx={10}
-        cy={0}
-        r={1.4}
-        fill="#fff"
-        stroke="#111"
-        strokeWidth={1}
-      />
+      <circle cx={10} cy={0} r={1.4} fill="#fff" stroke="#111" strokeWidth={1} />
     </g>
   );
 }
 export function MetroMap() {
   const svgRef = useRef<SVGSVGElement>(null);
-  const [geometry, setGeometry] = useState<Partial<Record<LineName, Geometry>>>(
-    {},
-  );
+  const [geometry, setGeometry] = useState<Partial<Record<LineName, Geometry>>>({});
   const [selected, setSelected] = useState<string | null>(null);
   const snapshot = useSnapshotStore((s) => s.snapshot),
     now = useSnapshotStore((s) => s.now);
@@ -115,9 +96,7 @@ export function MetroMap() {
     if (!svg) return;
     const next: Partial<Record<LineName, Geometry>> = {};
     for (const line of lineNames) {
-      const path = svg.querySelector(
-        `#${linePaths[line].id}`,
-      ) as SVGPathElement;
+      const path = svg.querySelector(`#${linePaths[line].id}`) as SVGPathElement;
       const length = path.getTotalLength();
       const anchors = lineOrder[line].map((id) => {
         const station = stationById[id];
@@ -138,9 +117,7 @@ export function MetroMap() {
     }
     setGeometry(next);
   }, []);
-  const trains = snapshot
-    ? lineNames.flatMap((line) => snapshot.lines[line].trains)
-    : [];
+  const trains = snapshot ? lineNames.flatMap((line) => snapshot.lines[line].trains) : [];
   const chosen = trains.find((t) => `${t.line}:${t.id}` === selected);
   return (
     <section className="map-panel" aria-label="Mapa geral da rede">
@@ -152,32 +129,30 @@ export function MetroMap() {
           aria-label="Mapa do Metro de Lisboa — selecione uma estação"
           className="metro-map"
         >
-          {(["azul", "vermelha", "amarela", "verde"] as LineName[]).map(
-            (line) => {
-              const definition = linePaths[line];
-              return definition.kind === "stroke" ? (
-                <path
-                  key={line}
-                  id={definition.id}
-                  d={definition.d}
-                  stroke={LINE_COLOR[line]}
-                  strokeWidth={8}
-                  fill="none"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  pointerEvents="none"
-                />
-              ) : (
-                <path
-                  key={line}
-                  id={definition.id}
-                  d={definition.d}
-                  fill={LINE_COLOR[line]}
-                  pointerEvents="none"
-                />
-              );
-            },
-          )}
+          {(["azul", "vermelha", "amarela", "verde"] as LineName[]).map((line) => {
+            const definition = linePaths[line];
+            return definition.kind === "stroke" ? (
+              <path
+                key={line}
+                id={definition.id}
+                d={definition.d}
+                stroke={LINE_COLOR[line]}
+                strokeWidth={8}
+                fill="none"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                pointerEvents="none"
+              />
+            ) : (
+              <path
+                key={line}
+                id={definition.id}
+                d={definition.d}
+                fill={LINE_COLOR[line]}
+                pointerEvents="none"
+              />
+            );
+          })}
           {lineNames.map((line) => (
             <g key={line}>
               {lineOrder[line].map((id) => {
@@ -255,10 +230,7 @@ export function MetroMap() {
           <i className="estimated-dot" aria-hidden="true" />
           Posições estimadas · selecione uma estação para ver detalhes
         </span>
-        <span>
-          {trains.filter((t) => now < t.validUntil).length} comboios
-          acompanhados
-        </span>
+        <span>{trains.filter((t) => now < t.validUntil).length} comboios acompanhados</span>
       </div>
       {chosen && (
         <div className="train-info" role="status">
@@ -267,8 +239,7 @@ export function MetroMap() {
               Comboio {chosen.id} · Linha {LINE_LABEL[chosen.line]}
             </strong>
             <span>
-              Sentido {chosen.dest} · próxima estação:{" "}
-              {stationById[chosen.to]?.name ?? chosen.to}
+              Sentido {chosen.dest} · próxima estação: {stationById[chosen.to]?.name ?? chosen.to}
             </span>
             <span>
               {now >= chosen.validUntil

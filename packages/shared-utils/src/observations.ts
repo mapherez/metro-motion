@@ -54,20 +54,10 @@ function partsAt(ms: number) {
       .filter((p) => p.type !== "literal")
       .map((p) => [p.type, Number(p.value)]),
   );
-  return Date.UTC(
-    parts.year,
-    parts.month - 1,
-    parts.day,
-    parts.hour,
-    parts.minute,
-    parts.second,
-  );
+  return Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second);
 }
 /** Parse a Lisbon wall clock without relying on the host time zone. Reject DST gaps. */
-export function parseMetroTime(
-  hora: string,
-  receivedAt?: number,
-): number | null {
+export function parseMetroTime(hora: string, receivedAt?: number): number | null {
   if (!/^\d{14}$/.test(hora)) return null;
   const [y, m, d, h, min, s] = [
     hora.slice(0, 4),
@@ -88,9 +78,7 @@ export function parseMetroTime(
     s > 59
   )
     return null;
-  const candidates = [wall, wall - 3600000]
-    .filter((t) => partsAt(t) === wall)
-    .map((t) => t / 1000);
+  const candidates = [wall, wall - 3600000].filter((t) => partsAt(t) === wall).map((t) => t / 1000);
   if (!candidates.length) return null;
   // The repeated autumn hour is inherently ambiguous. Choose the closest
   // non-future occurrence, preserving the ambiguity as an estimate.
@@ -98,9 +86,7 @@ export function parseMetroTime(
     ? candidates[0]
     : (candidates
         .filter((t) => t <= receivedAt + 5)
-        .sort(
-          (a, b) => Math.abs(a - receivedAt) - Math.abs(b - receivedAt),
-        )[0] ?? null);
+        .sort((a, b) => Math.abs(a - receivedAt) - Math.abs(b - receivedAt))[0] ?? null);
 }
 
 export function formatMetroTime(at: number): string {
@@ -127,8 +113,7 @@ export function observations(
   const result: Observation[] = [];
   for (const row of data.resposta) {
     const observedAt = parseMetroTime(row.hora, now);
-    if (observedAt === null || observedAt > now + 5 || now - observedAt >= 30)
-      continue;
+    if (observedAt === null || observedAt > now + 5 || now - observedAt >= 30) continue;
     for (const [id, etaString] of [
       [row.comboio, row.tempoChegada1],
       [row.comboio2, row.tempoChegada2],
@@ -141,9 +126,7 @@ export function observations(
       const meta = row.destino ? destinos[row.destino] : undefined;
       // Destination IDs represent stations, not unique lines. Intermediate
       // destinations are resolved by name against the line's actual topology.
-      const possible = lineNames.filter((l) =>
-        lineOrder[l].includes(row.stop_id),
-      );
+      const possible = lineNames.filter((l) => lineOrder[l].includes(row.stop_id));
       const line =
         hinted && possible.includes(hinted)
           ? hinted
@@ -180,8 +163,7 @@ export function observations(
         arrivalAt: observedAt + eta,
         etaSeconds: eta,
         destinationId: row.destino,
-        destination:
-          (row.destino && destinationNames?.[row.destino]) || meta?.name || "",
+        destination: (row.destino && destinationNames?.[row.destino]) || meta?.name || "",
         direction,
         leavingService: String(row.sairServico) === "1",
         unit: row.UT,
@@ -216,8 +198,6 @@ function destinationStation(id?: string, names?: Record<string, string>) {
       .replace(/[-/]/g, " ")
       .toLowerCase();
   return name
-    ? Object.values(stationById).find(
-        (s) => normalize(s.name) === normalize(name),
-      )?.id
+    ? Object.values(stationById).find((s) => normalize(s.name) === normalize(name))?.id
     : undefined;
 }

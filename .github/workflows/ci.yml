@@ -2,23 +2,61 @@ name: CI
 
 on:
   push:
-    branches: ['**']
-    tags: ['v*']
+    branches: ["**"]
   pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
 
-concurrency:
-  group: ci-${{ github.ref }}-${{ github.event_name }}
-  cancel-in-progress: false
-
 env:
-  TURBO_TELEMETRY_DISABLED: '1'
+  TURBO_TELEMETRY_DISABLED: "1"
+
+concurrency:
+  group: metro-motion-ci-${{ github.event_name == 'push' && contains(github.event.head_commit.message, 'metro-motion-Release:') && github.sha || github.ref }}
+  cancel-in-progress: true
 
 jobs:
+  plan:
+    name: Select CI work
+    runs-on: ubuntu-latest
+    outputs:
+      mode: ${{ steps.plan.outputs.mode }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "26"
+          package-manager-cache: false
+      - name: Recognize a version-only release request
+        id: plan
+        shell: bash
+        run: |
+          set -euo pipefail
+          mode=full
+          if [[ "$GITHUB_EVENT_NAME" == push ]]; then
+            mode=$(node tools/ci-policy.mjs classify "$GITHUB_SHA")
+          fi
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+
+  policy:
+    name: CI reuse policy tests
+    needs: plan
+    if: needs.plan.outputs.mode == 'full'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "26"
+          package-manager-cache: false
+      - run: node --test tools/ci-policy.test.mjs
+
   checks:
+    needs: plan
+    if: needs.plan.outputs.mode == 'full'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -27,24 +65,28 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
-          node-version: '24'
+          node-version: "24"
           package-manager-cache: false
       - name: Install pinned pnpm and dependencies
         run: |
-          npm install --global pnpm@8.15.5
+          npm install --global pnpm@9.15.9
           pnpm install --frozen-lockfile
       - name: Check release version
         run: pnpm version:check
       - name: Build, typecheck and tests
         run: pnpm test
+      - run: pnpm check:code
       - name: Docker Compose integration (mock, no Metro token)
         run: pnpm test:integration
 
-  publish-app:
-    needs: checks
-    if: startsWith(github.ref, 'refs/tags/v') && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-    permissions:
-      contents: read
-      packages: write
-    uses: ./.github/workflows/docker-app.yml
-
+  approved:
+    name: CI approved
+    needs: [plan, policy, checks]
+    if: ${{ !cancelled() && needs.plan.outputs.mode == 'full' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every source gate
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          node -e 'const jobs = JSON.parse(process.env.RESULTS); if (Object.values(jobs).some(job => job.result !== "success")) process.exit(1)'

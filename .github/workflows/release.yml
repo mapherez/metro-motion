@@ -1,0 +1,70 @@
+name: Release
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: read
+concurrency:
+  group: metro-motion-release
+  cancel-in-progress: false
+jobs:
+  approval:
+    name: Reuse approved source CI
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      source_sha: ${{ steps.ci.outputs.source_sha }}
+      ci_run_id: ${{ steps.ci.outputs.ci_run_id }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "26"
+          package-manager-cache: false
+      - name: Require successful CI for the exact source
+        id: ci
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const { pathToFileURL } = require('node:url');
+            const { requireApprovedCI } = await import(pathToFileURL(`${process.env.GITHUB_WORKSPACE}/tools/ci-policy.mjs`).href);
+            const tag = context.ref.startsWith('refs/tags/') ? context.ref.slice('refs/tags/'.length) : '';
+            if (!tag) throw new Error("Release requires a version tag.");
+            const approval = await requireApprovedCI({ github, ...context.repo, revision: context.sha, tag });
+            core.setOutput('source_sha', approval.sourceSha);
+            core.setOutput('ci_run_id', String(approval.runId));
+            core.notice(`Reusing source CI ${approval.runId} (${approval.sourceSha}); no source checks are repeated.`);
+            try {
+              await github.rest.repos.getReleaseByTag({ ...context.repo, tag });
+              throw new Error('This tag already has a GitHub Release.');
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+
+  image:
+    needs: approval
+    permissions:
+      contents: read
+      packages: write
+      actions: read
+    uses: ./.github/workflows/docker-app.yml
+    with:
+      publish: true
+  publish:
+    needs: image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Create GitHub Release
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const tag = context.ref.slice('refs/tags/'.length);
+            await github.rest.repos.createRelease({ ...context.repo, tag_name: tag, name: tag,
+              generate_release_notes: true, prerelease: tag.includes('-') });

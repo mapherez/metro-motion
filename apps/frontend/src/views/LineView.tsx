@@ -19,8 +19,7 @@ function RailTrain({ train, centers }: { train: Train; centers: number[] }) {
           p = Math.max(0, Math.min(centers.length - 1, sample.position));
         const index = Math.floor(p),
           last = Math.min(index + 1, centers.length - 1);
-        const y =
-          centers[index] + (centers[last] - centers[index]) * (p - index);
+        const y = centers[index] + (centers[last] - centers[index]) * (p - index);
         element.style.transform = `translate(${train.direction === 1 ? 10 : -10}px, ${y}px)`;
         element.style.opacity = String(sample.opacity);
         element.dataset.phase = sample.phase;
@@ -98,9 +97,7 @@ export function LineView() {
             <span className="heading-dot" aria-hidden="true" />
             Linha {LINE_LABEL[line]}
           </h1>
-          <p className="lead">
-            {lineOrder[line].length} estações · ambos os sentidos
-          </p>
+          <p className="lead">{lineOrder[line].length} estações · ambos os sentidos</p>
         </div>
         <span className="line-state">
           {snapshot?.serviceOpen === false
@@ -110,13 +107,9 @@ export function LineView() {
               : "Estado do operador indisponível"}
         </span>
       </div>
-      <p className="rail-help">
-        Toque numa estação para ver os próximos comboios e a localização.
-      </p>
+      <p className="rail-help">Toque numa estação para ver os próximos comboios e a localização.</p>
       {stale && snapshot?.serviceOpen !== false && (
-        <p className="notice">
-          Sem tempos de chegada atuais. A aguardar dados do Metro.
-        </p>
+        <p className="notice">Sem tempos de chegada atuais. A aguardar dados do Metro.</p>
       )}
       <div ref={listRef} className="station-timeline">
         <div
@@ -124,10 +117,7 @@ export function LineView() {
           aria-hidden="true"
           style={{
             top: centers[0] ?? 0,
-            height: Math.max(
-              0,
-              (centers[centers.length - 1] ?? 0) - (centers[0] ?? 0),
-            ),
+            height: Math.max(0, (centers[centers.length - 1] ?? 0) - (centers[0] ?? 0)),
           }}
         />
         <div className="rail-trains">
@@ -138,18 +128,14 @@ export function LineView() {
         <ol className="station-list">
           {lineOrder[line].map((stationId) => {
             const station =
-              snapshot?.metadata.find((s) => s.id === stationId) ??
-              stationById[stationId];
+              snapshot?.metadata.find((s) => s.id === stationId) ?? stationById[stationId];
             const arrivals = freshArrivals(
-              data?.stations.find((s) => s.stationId === stationId)?.arrivals ??
-                [],
+              data?.stations.find((s) => s.stationId === stationId)?.arrivals ?? [],
               now,
             );
             const next = [
               ...new Map(
-                arrivals
-                  .map((a) => [`${a.direction}:${a.destinoId}`, a] as const)
-                  .reverse(),
+                arrivals.map((a) => [`${a.direction}:${a.destinoId}`, a] as const).reverse(),
               ).values(),
             ].slice(0, 2);
             return (
@@ -211,8 +197,7 @@ export function LineView() {
         </ol>
       </div>
       <p className="view-note">
-        As posições na linha são estimadas. Os tempos de chegada vêm do Metro de
-        Lisboa.
+        As posições na linha são estimadas. Os tempos de chegada vêm do Metro de Lisboa.
       </p>
     </section>
   );

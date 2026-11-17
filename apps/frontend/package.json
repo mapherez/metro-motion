@@ -1,13 +1,13 @@
 {
   "name": "@metro/frontend",
-  "private": true,
   "version": "0.1.0",
+  "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "prebuild": "pnpm -w -r --filter @metro/shared-types --filter @metro/station-data --filter @metro/shared-utils build",
-    "build": "tsc -b && vite build",
-    "preview": "vite preview --port 5174",
+    "dev": "vp dev",
+    "prebuild": "pnpm --dir ../.. --filter @metro/shared-types --filter @metro/station-data --filter @metro/shared-utils run build",
+    "build": "tsc -b && vp build",
+    "preview": "vp preview --port 5174",
     "lint": "tsc --noEmit"
   },
   "dependencies": {
@@ -29,12 +29,13 @@
     "@types/node": "^20.12.7",
     "@types/react": "^18.2.74",
     "@types/react-dom": "^18.2.24",
-    "@vitejs/plugin-react": "^4.3.1",
+    "@vitejs/plugin-react": "^5.1.4",
     "autoprefixer": "^10.4.21",
     "postcss": "^8.5.6",
     "tailwindcss": "^4.1.13",
     "typescript": "^5.4.0",
-    "vite": "^5.3.1",
-    "vite-plugin-qrcode": "^0.3.0"
+    "vite": "catalog:",
+    "vite-plugin-qrcode": "^0.3.0",
+    "vite-plus": "catalog:"
   }
 }

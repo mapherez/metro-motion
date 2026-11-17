@@ -2,10 +2,7 @@ import { readFile } from "node:fs/promises";
 import type { FastifyBaseLogger } from "fastify";
 import { z } from "zod";
 import { TrainTracker, type MetroData } from "@metro/shared-utils";
-import {
-  Snapshot as SnapshotSchema,
-  StationMetadata as MetadataSchema,
-} from "@metro/shared-types";
+import { Snapshot as SnapshotSchema, StationMetadata as MetadataSchema } from "@metro/shared-types";
 import type { Snapshot, StationMetadata } from "@metro/shared-types";
 import { lineNames, destinos } from "@metro/station-data";
 import { stationMetadata } from "@metro/station-data/metadata";
@@ -62,9 +59,7 @@ export class Ingestor {
   async start() {
     if (!this.stopped) return;
     if (this.config.mock)
-      this.replay = validateReplay(
-        JSON.parse(await readFile(this.config.mockFile, "utf8")),
-      );
+      this.replay = validateReplay(JSON.parse(await readFile(this.config.mockFile, "utf8")));
     this.stopped = false;
     this.pending = this.loop();
   }
@@ -107,8 +102,7 @@ export class Ingestor {
     }
   }
   private async ancillary(now: number) {
-    if (this.config.mock || (this.deps.fetchData && !this.deps.fetchEndpoint))
-      return;
+    if (this.config.mock || (this.deps.fetchData && !this.deps.fetchEndpoint)) return;
     const tasks: Promise<void>[] = [];
     if (now >= this.nextMetadata) {
       this.nextMetadata = now + 86400;
@@ -136,9 +130,7 @@ export class Ingestor {
                 .replace(/^\[|\]$/g, "")
                 .split(",")
                 .map((u) => u.trim())
-                .filter((u) =>
-                  /^https:\/\/([\w-]+\.)*metrolisboa\.pt\//.test(u),
-                );
+                .filter((u) => /^https:\/\/([\w-]+\.)*metrolisboa\.pt\//.test(u));
               const parsed = MetadataSchema.safeParse({
                 ...station,
                 name: s.stop_name,
@@ -150,9 +142,7 @@ export class Ingestor {
             });
           } catch {
             this.nextMetadata = Math.min(this.nextMetadata, now + 300);
-            this.log.warn(
-              "Station metadata unavailable; using last valid catalog",
-            );
+            this.log.warn("Station metadata unavailable; using last valid catalog");
           }
         })(),
         (async () => {
@@ -167,13 +157,10 @@ export class Ingestor {
                 ),
               })
               .parse(await this.request("infoDestinos/todos"));
-            for (const d of raw.resposta)
-              this.destinationNames[d.id_destino] = d.nome_destino;
+            for (const d of raw.resposta) this.destinationNames[d.id_destino] = d.nome_destino;
           } catch {
             this.nextMetadata = Math.min(this.nextMetadata, now + 300);
-            this.log.warn(
-              "Destination metadata unavailable; using last valid catalog",
-            );
+            this.log.warn("Destination metadata unavailable; using last valid catalog");
           }
         })(),
       );
@@ -200,23 +187,17 @@ export class Ingestor {
                 },
               } as Snapshot["lines"][typeof line];
           } catch {
-            this.log.warn(
-              "Operator status unavailable; retaining original status timestamp",
-            );
+            this.log.warn("Operator status unavailable; retaining original status timestamp");
           }
         })(),
       );
     }
     await Promise.all(tasks);
   }
-  private async arrivals(
-    now: number,
-  ): Promise<{ data: MetroData; source: Snapshot["source"] }> {
+  private async arrivals(now: number): Promise<{ data: MetroData; source: Snapshot["source"] }> {
     if (this.config.mock) {
       if (!this.replay)
-        this.replay = validateReplay(
-          JSON.parse(await readFile(this.config.mockFile, "utf8")),
-        );
+        this.replay = validateReplay(JSON.parse(await readFile(this.config.mockFile, "utf8")));
       this.replayStart ??= now;
       return {
         data: replayAt(this.replay, this.replayStart, now),
@@ -224,9 +205,7 @@ export class Ingestor {
       };
     }
     if (!this.fallback || now >= this.nextGlobalCheck) {
-      const data = MetroResponse.parse(
-        await this.request("tempoEspera/Estacao/todos"),
-      );
+      const data = MetroResponse.parse(await this.request("tempoEspera/Estacao/todos"));
       if (data.resposta.length) {
         this.emptyCount = 0;
         this.fallback = false;
@@ -244,9 +223,7 @@ export class Ingestor {
         ),
       ),
     );
-    const successful = responses.flatMap((r) =>
-      r.status === "fulfilled" ? [r.value] : [],
-    );
+    const successful = responses.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
     if (!successful.length) throw new Error("All line endpoints unavailable");
     return {
       data: { resposta: successful.flatMap((d) => d.resposta) },
@@ -271,16 +248,10 @@ export class Ingestor {
         this.log.warn("Unable to refresh closed-service state; retrying");
       }
       this.backoffMs = 0;
-      return Math.max(
-        100,
-        Math.min(status.msUntilOpen, this.config.redis.ttlSeconds * 500),
-      );
+      return Math.max(100, Math.min(status.msUntilOpen, this.config.redis.ttlSeconds * 500));
     }
     try {
-      const [arrivals] = await Promise.all([
-        this.arrivals(now),
-        this.ancillary(now),
-      ]);
+      const [arrivals] = await Promise.all([this.arrivals(now), this.ancillary(now)]);
       this.lastSnapshot = SnapshotSchema.parse(
         this.tracker.update(arrivals.data, this.now(), {
           metadata: this.metadata,
@@ -294,9 +265,7 @@ export class Ingestor {
     } catch (error) {
       const code = (error as { status?: number }).status;
       const initial = code === 429 || (code && code >= 500) ? 6000 : 4000;
-      this.backoffMs = this.backoffMs
-        ? Math.min(this.backoffMs * 2, 30000)
-        : initial;
+      this.backoffMs = this.backoffMs ? Math.min(this.backoffMs * 2, 30000) : initial;
       this.log.warn(
         { status: code, backoffMs: this.backoffMs },
         "Ingest failed; retaining original observation timestamps",
@@ -312,10 +281,7 @@ export class Ingestor {
     }
     return Math.max(
       100,
-      this.config.pollIntervalMs +
-        this.backoffMs +
-        Math.floor(Math.random() * 200) -
-        100,
+      this.config.pollIntervalMs + this.backoffMs + Math.floor(Math.random() * 200) - 100,
     );
   }
 }

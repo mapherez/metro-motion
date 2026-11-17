@@ -21,7 +21,7 @@ export const lineOrder: Record<LineName, string[]> = {
     "MM", // Martim Moniz
     "RO", // Rossio
     "BC", // Baixa/Chiado
-    "CS"  // Cais do Sodré
+    "CS", // Cais do Sodré
   ],
   // Reboleira -> Santa Apolónia
   azul: [
@@ -42,7 +42,7 @@ export const lineOrder: Record<LineName, string[]> = {
     "RE", // Restauradores
     "BC", // Baixa/Chiado
     "TP", // Terreiro do Paço
-    "SP"  // Santa Apolónia
+    "SP", // Santa Apolónia
   ],
   // Odivelas -> Rato
   amarela: [
@@ -58,7 +58,7 @@ export const lineOrder: Record<LineName, string[]> = {
     "SA", // Saldanha
     "PI", // Picoas
     "MP", // Marquês de Pombal
-    "RA"  // Rato
+    "RA", // Rato
   ],
   // Aeroporto -> São Sebastião
   vermelha: [
@@ -73,12 +73,15 @@ export const lineOrder: Record<LineName, string[]> = {
     "OL", // Olaias
     "AM", // Alameda
     "SA", // Saldanha
-    "SS"  // São Sebastião
-  ]
+    "SS", // São Sebastião
+  ],
 };
 
 // Map destino IDs to human names and inferred line + terminal stop_id
-export const destinos: Record<string, { name: string; line?: LineName; terminal?: string } | undefined> = {
+export const destinos: Record<
+  string,
+  { name: string; line?: LineName; terminal?: string } | undefined
+> = {
   "33": { name: "Reboleira", line: "azul", terminal: "RB" },
   "34": { name: "Amadora Este", line: "azul" },
   "35": { name: "Pontinha", line: "azul" },
@@ -102,13 +105,13 @@ export const destinos: Record<string, { name: string; line?: LineName; terminal?
   "56": { name: "Bela Vista", line: "vermelha" },
   "57": { name: "Chelas", line: "vermelha" },
   "59": { name: "Moscavide", line: "vermelha" },
-  "60": { name: "Aeroporto", line: "vermelha", terminal: "AP" }
+  "60": { name: "Aeroporto", line: "vermelha", terminal: "AP" },
 };
 
 export function neighborForDirection(
   line: LineName,
   fromStop: string,
-  towardsTerminal: string
+  towardsTerminal: string,
 ): { next?: string; prev?: string } {
   const order = lineOrder[line];
   const i = order.indexOf(fromStop);
@@ -126,4 +129,3 @@ export function neighborForDirection(
     return { next: order[i], prev: order[i - 1] };
   }
 }
-

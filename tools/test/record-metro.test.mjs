@@ -6,7 +6,7 @@ import path from "node:path";
 import { argumentsFor, record } from "../record-metro.mjs";
 import { formatMetroTime } from "../../packages/shared-utils/dist/index.js";
 
-test("recorder validates duration, session count and polling interval", () => {
+void test("recorder validates duration, session count and polling interval", () => {
   assert.deepEqual(argumentsFor([]).sessions, 2);
   assert.equal(argumentsFor([]).minutes, 45);
   assert.equal(argumentsFor(["--probe"]).probe, true);
@@ -37,7 +37,7 @@ async function mocked(t, data) {
     else process.env.METRO_API_BASE = originalBase;
   });
 }
-test("recorder refuses old or non-numeric data instead of claiming a normal-service recording", async (t) => {
+void test("recorder refuses old or non-numeric data instead of claiming a normal-service recording", async (t) => {
   await mocked(t, () => ({
     resposta: [
       {
@@ -54,13 +54,11 @@ test("recorder refuses old or non-numeric data instead of claiming a normal-serv
     /No fresh numeric observations/,
   );
 });
-test("recorded frames whitelist data fields and never persist credentials or upstream extras", async (t) => {
+void test("recorded frames whitelist data fields and never persist credentials or upstream extras", async (t) => {
   const directory = await mkdtemp(path.join(tmpdir(), "metro-recording-test-"));
   t.after(async () => {
     const relative = path.relative(tmpdir(), directory);
-    assert.ok(
-      relative && !relative.startsWith("..") && !path.isAbsolute(relative),
-    );
+    assert.ok(relative && !relative.startsWith("..") && !path.isAbsolute(relative));
     await rm(directory, { recursive: true, force: true });
   });
   await mocked(t, () => ({
@@ -79,16 +77,7 @@ test("recorded frames whitelist data fields and never persist credentials or ups
       },
     ],
   }));
-  await record(
-    argumentsFor([
-      "--sessions",
-      "1",
-      "--minutes",
-      ".01",
-      "--output",
-      directory,
-    ]),
-  );
+  await record(argumentsFor(["--sessions", "1", "--minutes", ".01", "--output", directory]));
   const files = await readdir(directory),
     frameFile = files.find((f) => f.endsWith(".jsonl"));
   assert.ok(frameFile);

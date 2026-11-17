@@ -1,13 +1,7 @@
 import { z } from "zod";
 
 export const LineNameEnum = z.enum(["verde", "azul", "amarela", "vermelha"]);
-export const MotionPhase = z.enum([
-  "approaching",
-  "dwelling",
-  "departing",
-  "running",
-  "stale",
-]);
+export const MotionPhase = z.enum(["approaching", "dwelling", "departing", "running", "stale"]);
 export const MotionSegment = z
   .object({
     startAt: z.number().finite(),

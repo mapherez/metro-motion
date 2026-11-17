@@ -1,11 +1,6 @@
 import { before, after, beforeEach, test, mock } from "node:test";
 import assert from "node:assert/strict";
-import {
-  TrainTracker,
-  formatMetroTime,
-  sampleMotion,
-  MAX_SPEED,
-} from "@metro/shared-utils";
+import { TrainTracker, formatMetroTime, sampleMotion, MAX_SPEED } from "@metro/shared-utils";
 
 // Run the production presentation engine with a deterministic monotonic clock.
 // Browser rendering is not involved: these tests exercise SSE reconciliation.
@@ -50,18 +45,13 @@ const row = (sec, eta) => ({
   destino: "54",
   tempoChegada1: String(eta),
 });
-const train = () =>
-  store.getState().snapshot.lines.verde.trains.find((tr) => tr.id === "7C");
-const close = (a, b, tolerance = 1e-7) =>
-  assert.ok(Math.abs(a - b) <= tolerance, `${a} != ${b}`);
+const train = () => store.getState().snapshot.lines.verde.trains.find((tr) => tr.id === "7C");
+const close = (a, b, tolerance = 1e-7) => assert.ok(Math.abs(a - b) <= tolerance, `${a} != ${b}`);
 
-test("network delay and late SSE updates preserve continuity and a feasible arrival time", () => {
+void test("network delay and late SSE updates preserve continuity and a feasible arrival time", () => {
   const tracker = new TrainTracker();
   for (let sec = 0; sec <= 64; sec += 2) {
-    const snapshot = tracker.update(
-      { resposta: [row(sec, Math.max(0, 60 - sec))] },
-      epoch + sec,
-    );
+    const snapshot = tracker.update({ resposta: [row(sec, Math.max(0, 60 - sec))] }, epoch + sec);
     elapsed = sec + 1.8;
     const before = train() && engine.renderedMotion(train());
     engine.ingestSnapshot(snapshot);
@@ -79,15 +69,12 @@ test("network delay and late SSE updates preserve continuity and a feasible arri
   }
 });
 
-test("oscillating ETA updates preserve the displayed position and velocity without reversing", () => {
+void test("oscillating ETA updates preserve the displayed position and velocity without reversing", () => {
   const tracker = new TrainTracker();
   let last = -Infinity;
   for (let sec = 0; sec <= 120; sec += 2) {
     const jitter = [0, 10, -8, 4, -3, 12, -10][(sec / 2) % 7];
-    const snapshot = tracker.update(
-      { resposta: [row(sec, 180 - sec + jitter)] },
-      epoch + sec,
-    );
+    const snapshot = tracker.update({ resposta: [row(sec, 180 - sec + jitter)] }, epoch + sec);
     elapsed = sec + 0.6;
     const before = train() && engine.renderedMotion(train());
     engine.ingestSnapshot(snapshot);
@@ -98,20 +85,15 @@ test("oscillating ETA updates preserve the displayed position and velocity witho
     }
     assert.equal(train().retiringAt, undefined);
     for (let frame = 0; frame < 20; frame++) {
-      const sample = engine.renderedMotion(
-        train(),
-        epoch + elapsed + frame / 10,
-      );
+      const sample = engine.renderedMotion(train(), epoch + elapsed + frame / 10);
       assert.ok(sample.position >= last - 1e-7);
-      assert.ok(
-        sample.velocity >= -1e-8 && sample.velocity <= MAX_SPEED + 1e-8,
-      );
+      assert.ok(sample.velocity >= -1e-8 && sample.velocity <= MAX_SPEED + 1e-8);
       last = sample.position;
     }
   }
 });
 
-test("a repeated source timestamp never freshens a displayed train", () => {
+void test("a repeated source timestamp never freshens a displayed train", () => {
   const tracker = new TrainTracker();
   const data = { resposta: [row(0, 60)] };
   engine.ingestSnapshot(tracker.update(data, epoch));
@@ -129,14 +111,12 @@ test("a repeated source timestamp never freshens a displayed train", () => {
   close(later.position, sampleMotion(train(), epoch + 30).position);
 });
 
-test("reacquisition after stale data fades in from the time the browser receives confirmation", () => {
+void test("reacquisition after stale data fades in from the time the browser receives confirmation", () => {
   const tracker = new TrainTracker();
   engine.ingestSnapshot(tracker.update({ resposta: [row(0, 60)] }, epoch));
   const originalJourney = train().journeyId;
   elapsed = 35.5;
-  engine.ingestSnapshot(
-    tracker.update({ resposta: [row(35, 10)] }, epoch + 35),
-  );
+  engine.ingestSnapshot(tracker.update({ resposta: [row(35, 10)] }, epoch + 35));
   assert.equal(train().journeyId, originalJourney);
   elapsed = 36.5;
   close(engine.renderedMotion(train()).opacity, 0);
@@ -152,7 +132,7 @@ test("reacquisition after stale data fades in from the time the browser receives
   close(engine.renderedMotion(train()).opacity, 1);
 });
 
-test("an incompatible server correction fades the displayed trajectory without a position jump", () => {
+void test("an incompatible server correction fades the displayed trajectory without a position jump", () => {
   const tracker = new TrainTracker();
   engine.ingestSnapshot(tracker.update({ resposta: [row(0, 60)] }, epoch));
   elapsed = 3.5;
@@ -162,9 +142,7 @@ test("an incompatible server correction fades the displayed trajectory without a
   // A new positive prediction behind the train is incompatible. A residual
   // zero at an already-passed platform is deliberately ignored by the tracker.
   const incompatible = { ...row(4, 10), stop_id: "CG", cais: "CG:forward" };
-  engine.ingestSnapshot(
-    tracker.update({ resposta: [incompatible] }, epoch + 4),
-  );
+  engine.ingestSnapshot(tracker.update({ resposta: [incompatible] }, epoch + 4));
   const after = engine.renderedMotion(train());
   close(before.position, after.position);
   close(before.velocity, after.velocity);
@@ -172,8 +150,6 @@ test("an incompatible server correction fades the displayed trajectory without a
   elapsed = 5.9;
   close(engine.renderedMotion(train()).opacity, 0.5, 1e-6);
   elapsed = 6.4;
-  engine.ingestSnapshot(
-    tracker.update({ resposta: [incompatible] }, epoch + 6),
-  );
+  engine.ingestSnapshot(tracker.update({ resposta: [incompatible] }, epoch + 6));
   close(engine.renderedMotion(train()).opacity, 0);
 });

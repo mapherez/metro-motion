@@ -1,0 +1,11 @@
+{
+  "workflow": "ci.yml",
+  "marker": "metro-motion-Release:",
+  "branch": "main",
+  "files": [
+    {
+      "path": "package.json",
+      "fields": [["version"]]
+    }
+  ]
+}

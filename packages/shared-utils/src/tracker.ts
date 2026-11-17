@@ -1,11 +1,6 @@
 import { destinos, lineNames, lineOrder } from "@metro/station-data";
 import { stationMetadata } from "@metro/station-data/metadata";
-import type {
-  LineName,
-  Snapshot,
-  StationMetadata,
-  Train,
-} from "@metro/shared-types";
+import type { LineName, Snapshot, StationMetadata, Train } from "@metro/shared-types";
 import {
   observations,
   parseMetroTime,
@@ -13,12 +8,7 @@ import {
   type MetroRow,
   type Observation,
 } from "./observations.js";
-import {
-  planMotion,
-  sampleMotion,
-  stationary,
-  STALE_SECONDS,
-} from "./motion.js";
+import { planMotion, sampleMotion, stationary, STALE_SECONDS } from "./motion.js";
 
 type Pending = { token: string; seenAt: number; count: number };
 type DirectedObservation = Observation & { direction: -1 | 1 };
@@ -29,10 +19,7 @@ export class TrainTracker {
   private pending = new Map<string, Pending>();
   private durations = new Map<string, number[]>();
   private dwellDurations = new Map<LineName, number[]>();
-  private stationSeen = new Map<
-    string,
-    { station: string; at: number; departedAt?: number }
-  >();
+  private stationSeen = new Map<string, { station: string; at: number; departedAt?: number }>();
   private generation = 0;
   constructor(private dwellSeconds = 25) {}
 
@@ -46,9 +33,7 @@ export class TrainTracker {
 
   private duration(line: LineName, from: string, to: string) {
     const values = this.durations.get(`${line}:${from}:${to}`) ?? [];
-    return values.length
-      ? [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)]
-      : 90;
+    return values.length ? [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)] : 90;
   }
   private learn(key: string, value: number) {
     if (value < 15 || value > 600) return;
@@ -81,12 +66,10 @@ export class TrainTracker {
       const key = row.cais || `${row.stop_id}:${row.destino ?? ""}`;
       const previous = this.platforms.get(key);
       const previousTime = previous ? parseMetroTime(previous.hora, now) : null;
-      if (previousTime === null || time > previousTime)
-        this.platforms.set(key, { ...row });
+      if (previousTime === null || time > previousTime) this.platforms.set(key, { ...row });
     }
     for (const [key, row] of this.platforms)
-      if (now - (parseMetroTime(row.hora, now) ?? 0) > 120)
-        this.platforms.delete(key);
+      if (now - (parseMetroTime(row.hora, now) ?? 0) > 120) this.platforms.delete(key);
     const obs = observations(
       { resposta: [...this.platforms.values()] },
       now,
@@ -99,8 +82,7 @@ export class TrainTracker {
           trains: [] as Train[],
           stations: lineOrder[line].map((stationId) => ({
             stationId,
-            arrivals:
-              [] as Snapshot["lines"][LineName]["stations"][number]["arrivals"],
+            arrivals: [] as Snapshot["lines"][LineName]["stations"][number]["arrivals"],
           })),
           status: options.statuses?.[line]?.status ?? {
             message: "Estado do operador indisponível",
@@ -117,11 +99,7 @@ export class TrainTracker {
     for (const o of obs) {
       const key = `${o.line}:${o.trainId}`;
       const previous = this.trains.get(key);
-      if (
-        previous &&
-        o.direction === undefined &&
-        previous.destinationId === o.destinationId
-      )
+      if (previous && o.direction === undefined && previous.destinationId === o.destinationId)
         o.direction = previous.direction;
       const line = lines[o.line];
       line.dataObservedAt = Math.max(line.dataObservedAt ?? 0, o.observedAt);
@@ -150,18 +128,13 @@ export class TrainTracker {
     }
 
     for (const [key, list] of grouped) {
-      list.sort(
-        (a, b) => a.arrivalAt - b.arrivalAt || b.observedAt - a.observedAt,
-      );
+      list.sort((a, b) => a.arrivalAt - b.arrivalAt || b.observedAt - a.observedAt);
       const previous = this.trains.get(key);
       // Each platform has its own source clock. A maximum timestamp hides a
       // later update to the nearest platform when a distant one is already
       // ahead. Deduplicate the complete set of platform versions instead.
       const version = list
-        .map(
-          (o) =>
-            `${o.platform}:${o.stationId}:${o.destinationId}:${o.observedAt}`,
-        )
+        .map((o) => `${o.platform}:${o.stationId}:${o.destinationId}:${o.observedAt}`)
         .sort()
         .join("|");
       if (previous && this.groupVersions.get(key) === version) continue;
@@ -178,8 +151,7 @@ export class TrainTracker {
               // station whose passage has already been established.
               !(
                 o.arrivalAt <= now &&
-                (lineOrder[o.line].indexOf(o.stationId) -
-                  lineOrder[o.line].indexOf(previous.to)) *
+                (lineOrder[o.line].indexOf(o.stationId) - lineOrder[o.line].indexOf(previous.to)) *
                   previous.direction <
                   0
               ),
@@ -216,23 +188,18 @@ export class TrainTracker {
       ) {
         const ahead = active.filter(
           (o) =>
-            (route.indexOf(o.stationId) - (current?.position ?? 0)) *
-              previous.direction >=
-            -1e-8,
+            (route.indexOf(o.stationId) - (current?.position ?? 0)) * previous.direction >= -1e-8,
         );
-        const passed =
-          (targetIndex - current!.position) * previous.direction < -1e-8;
+        const passed = (targetIndex - current!.position) * previous.direction < -1e-8;
         const atStop =
-          Math.abs(targetIndex - current!.position) < 0.015 &&
-          candidate.arrivalAt <= now;
+          Math.abs(targetIndex - current!.position) < 0.015 && candidate.arrivalAt <= now;
         // A new clock several stations away says nothing about passage at
         // the current station. Only advance from a stop to its adjacent stop,
         // or discard a prediction whose station has already been passed.
         const nextStop = atStop
           ? ahead.find(
               (o) =>
-                route.indexOf(o.stationId) ===
-                  targetIndex + previous.direction &&
+                route.indexOf(o.stationId) === targetIndex + previous.direction &&
                 o.observedAt > previous.observedAt,
             )
           : undefined;
@@ -248,23 +215,16 @@ export class TrainTracker {
           candidate.destinationId !== previous.destinationId);
       if (previous && candidate.direction !== previous.direction) {
         const terminalId =
-          (options.metadata ?? stationMetadata).find(
-            (station) => station.name === previous.dest,
-          )?.id ?? destinos[previous.destinationId ?? ""]?.terminal;
+          (options.metadata ?? stationMetadata).find((station) => station.name === previous.dest)
+            ?.id ?? destinos[previous.destinationId ?? ""]?.terminal;
         const terminalIndex = terminalId ? route.indexOf(terminalId) : -1;
-        const atTerminal =
-          terminalIndex >= 0 &&
-          Math.abs(current!.position - terminalIndex) < 0.15;
+        const atTerminal = terminalIndex >= 0 && Math.abs(current!.position - terminalIndex) < 0.15;
         const imminent =
           targetIndex === terminalIndex
             ? candidate.arrivalAt <= now + 5
             : targetIndex === terminalIndex + candidate.direction &&
               candidate.arrivalAt - now <=
-                this.duration(
-                  candidate.line,
-                  route[terminalIndex],
-                  candidate.stationId,
-                );
+                this.duration(candidate.line, route[terminalIndex], candidate.stationId);
         // Two updates to a future return are still not evidence that the
         // current journey has reached its terminal and reversed. Keep its
         // last trajectory (and normal staleness limit) until compatible.
@@ -278,10 +238,7 @@ export class TrainTracker {
           now - previous.observedAt >= STALE_SECONDS);
       if (changedJourney || farCorrection) {
         const p = this.pending.get(key);
-        const count =
-          p?.token === token
-            ? p.count + (candidate.observedAt > p.seenAt ? 1 : 0)
-            : 1;
+        const count = p?.token === token ? p.count + (candidate.observedAt > p.seenAt ? 1 : 0) : 1;
         this.pending.set(key, { token, seenAt: candidate.observedAt, count });
         if (previous && previous.retiringAt === undefined)
           this.trains.set(key, { ...previous, retiringAt: now });
@@ -293,20 +250,10 @@ export class TrainTracker {
       const old = this.trains.get(key);
       if (old && candidate.observedAt <= old.observedAt) continue;
       const stop = this.stationSeen.get(key);
-      if (
-        old &&
-        stop &&
-        stop.departedAt === undefined &&
-        candidate.stationId !== stop.station
-      ) {
+      if (old && stop && stop.departedAt === undefined && candidate.stationId !== stop.station) {
         const elapsed = now - stop.at;
         const index = route.indexOf(stop.station);
-        if (
-          elapsed >= 1 &&
-          elapsed <= 180 &&
-          index > 0 &&
-          index < route.length - 1
-        ) {
+        if (elapsed >= 1 && elapsed <= 180 && index > 0 && index < route.length - 1) {
           const values = this.dwellDurations.get(candidate.line) ?? [];
           values.push(elapsed);
           if (values.length > 40) values.shift();
@@ -318,48 +265,32 @@ export class TrainTracker {
       const from = incoming ?? candidate.stationId;
       // Adjacent future arrival anchors provide useful initial travel priors.
       const trip = list.filter(
-        (o) =>
-          o.direction === candidate.direction &&
-          o.destinationId === candidate.destinationId,
+        (o) => o.direction === candidate.direction && o.destinationId === candidate.destinationId,
       );
-      const unique = [
-        ...new Map(trip.map((o) => [o.stationId, o])).values(),
-      ].sort(
+      const unique = [...new Map(trip.map((o) => [o.stationId, o])).values()].sort(
         (a, b) =>
           route.indexOf(a.stationId) * candidate.direction -
           route.indexOf(b.stationId) * candidate.direction,
       );
       for (let i = 1; i < unique.length; i++) {
         if (
-          Math.abs(
-            route.indexOf(unique[i].stationId) -
-              route.indexOf(unique[i - 1].stationId),
-          ) === 1
+          Math.abs(route.indexOf(unique[i].stationId) - route.indexOf(unique[i - 1].stationId)) ===
+          1
         )
           this.learn(
             `${candidate.line}:${unique[i - 1].stationId}:${unique[i].stationId}`,
-            unique[i].arrivalAt -
-              unique[i - 1].arrivalAt -
-              this.dwell(candidate.line),
+            unique[i].arrivalAt - unique[i - 1].arrivalAt - this.dwell(candidate.line),
           );
       }
       const remaining = Math.max(0, candidate.arrivalAt - now);
-      const estimateDuration = this.duration(
-        candidate.line,
-        from,
-        candidate.stationId,
-      );
+      const estimateDuration = this.duration(candidate.line, from, candidate.stationId);
       const initial = incoming
-        ? targetIndex -
-          candidate.direction * Math.min(1, remaining / estimateDuration)
+        ? targetIndex - candidate.direction * Math.min(1, remaining / estimateDuration)
         : targetIndex;
       const position = current?.position ?? initial;
       const velocity = current?.velocity ?? 0;
       const segments =
-        old &&
-        old.etaNext === 0 &&
-        remaining === 0 &&
-        old.to === candidate.stationId
+        old && old.etaNext === 0 && remaining === 0 && old.to === candidate.stationId
           ? old.segments
           : planMotion(
               position,
@@ -370,8 +301,7 @@ export class TrainTracker {
               candidate.direction,
             );
       if (!segments) {
-        if (old && old.retiringAt === undefined)
-          this.trains.set(key, { ...old, retiringAt: now });
+        if (old && old.retiringAt === undefined) this.trains.set(key, { ...old, retiringAt: now });
         continue;
       }
       const phase =
@@ -380,8 +310,7 @@ export class TrainTracker {
           : Math.abs(velocity) < 0.001
             ? "departing"
             : "running";
-      const journeyId =
-        old?.journeyId ?? `${key}:${++this.generation}:${Math.floor(now)}`;
+      const journeyId = old?.journeyId ?? `${key}:${++this.generation}:${Math.floor(now)}`;
       this.trains.set(key, {
         id: candidate.trainId,
         journeyId,
@@ -391,10 +320,7 @@ export class TrainTracker {
         to: candidate.stationId,
         etaNext: remaining,
         arrivalAt: candidate.arrivalAt,
-        progress01: Math.max(
-          0,
-          Math.min(1, 1 - Math.abs(targetIndex - position)),
-        ),
+        progress01: Math.max(0, Math.min(1, 1 - Math.abs(targetIndex - position))),
         dest: candidate.destination,
         destinationId: candidate.destinationId,
         observedAt: candidate.observedAt,
@@ -434,13 +360,8 @@ export class TrainTracker {
     }
     for (const line of lineNames)
       for (const station of lines[line].stations)
-        station.arrivals.sort(
-          (a, b) => (a.arrivalAt ?? 0) - (b.arrivalAt ?? 0),
-        );
-    const latest = Math.max(
-      0,
-      ...lineNames.map((l) => lines[l].dataObservedAt ?? 0),
-    );
+        station.arrivals.sort((a, b) => (a.arrivalAt ?? 0) - (b.arrivalAt ?? 0));
+    const latest = Math.max(0, ...lineNames.map((l) => lines[l].dataObservedAt ?? 0));
     return {
       schemaVersion: 2,
       t: latest || now,

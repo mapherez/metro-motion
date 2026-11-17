@@ -1,19 +1,7 @@
-import {
-  lazy,
-  Suspense,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type PointerEvent,
-} from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, type PointerEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { stationMetadata } from "@metro/station-data/metadata";
-import type {
-  LineName,
-  StationArrival,
-  StationMetadata,
-} from "@metro/shared-types";
+import type { LineName, StationArrival, StationMetadata } from "@metro/shared-types";
 import { useSnapshotStore } from "../state";
 import { API_BASE } from "../api";
 import { etaText, freshArrivals, LINE_COLOR, LINE_LABEL } from "../format";
@@ -65,10 +53,7 @@ export function StationDrawer({
       return;
     }
     const animation = dialog.animate(
-      [
-        { transform: dialog.style.transform || "translateX(0)" },
-        { transform: "translateX(100%)" },
-      ],
+      [{ transform: dialog.style.transform || "translateX(0)" }, { transform: "translateX(100%)" }],
       { duration: 220, easing: "cubic-bezier(.4,0,1,1)", fill: "forwards" },
     );
     void animation.finished.then(finishClose, finishClose);
@@ -101,9 +86,7 @@ export function StationDrawer({
       })
       .catch(() => {
         if (active)
-          setError(
-            "Não foi possível atualizar os detalhes. Pode consultar a informação local.",
-          );
+          setError("Não foi possível atualizar os detalhes. Pode consultar a informação local.");
       });
     return () => {
       active = false;
@@ -142,14 +125,13 @@ export function StationDrawer({
     const dx = event.clientX - start.x,
       elapsed = Math.max(1, performance.now() - start.at),
       width = dialogRef.current?.getBoundingClientRect().width ?? 400;
-    if (start.active && (dx > width * 0.28 || (dx > 50 && dx / elapsed > 0.5)))
-      close();
+    if (start.active && (dx > width * 0.28 || (dx > 50 && dx / elapsed > 0.5))) close();
     else if (dialogRef.current) {
       const dialog = dialogRef.current;
-      dialog.animate(
-        [{ transform: dialog.style.transform }, { transform: "translateX(0)" }],
-        { duration: reduced ? 0 : 180, easing: "ease-out" },
-      );
+      dialog.animate([{ transform: dialog.style.transform }, { transform: "translateX(0)" }], {
+        duration: reduced ? 0 : 180,
+        easing: "ease-out",
+      });
       dialog.style.transform = "";
     }
   };
@@ -206,9 +188,7 @@ export function StationDrawer({
               <button
                 key={line}
                 className="interchange"
-                style={
-                  { "--badge-color": LINE_COLOR[line] } as React.CSSProperties
-                }
+                style={{ "--badge-color": LINE_COLOR[line] } as React.CSSProperties}
                 onClick={() => navigate(`/line/${line}`)}
               >
                 Linha {LINE_LABEL[line]}
@@ -231,9 +211,7 @@ export function StationDrawer({
               <span>Tempos do operador</span>
             </div>
             {snapshot?.serviceOpen === false && (
-              <p className="notice">
-                Serviço encerrado. Horário normal: 06:30–01:00.
-              </p>
+              <p className="notice">Serviço encerrado. Horário normal: 06:30–01:00.</p>
             )}
             {station.lines.map((line) => {
               const data = snapshot?.lines[line];
@@ -246,8 +224,7 @@ export function StationDrawer({
               for (const arrival of arrivals) {
                 const key = arrival.destination ?? "Destino por confirmar";
                 const group = groups.get(key) ?? [];
-                if (!group.some((a) => a.trainId === arrival.trainId))
-                  group.push(arrival);
+                if (!group.some((a) => a.trainId === arrival.trainId)) group.push(arrival);
                 groups.set(key, group);
               }
               return (
@@ -260,10 +237,9 @@ export function StationDrawer({
                     />
                     <strong>Linha {LINE_LABEL[line]}</strong>
                   </div>
-                  {data?.status.observedAt &&
-                    now - data.status.observedAt < 120 && (
-                      <p className="operator-message">{data.status.message}</p>
-                    )}
+                  {data?.status.observedAt && now - data.status.observedAt < 120 && (
+                    <p className="operator-message">{data.status.message}</p>
+                  )}
                   {groups.size ? (
                     [...groups].map(([destination, items]) => (
                       <div className="arrival-direction" key={destination}>
@@ -311,16 +287,10 @@ export function StationDrawer({
                 <strong>
                   {entrance.opens} — {entrance.closes}
                 </strong>
-                . A estação mantém o horário normal através dos restantes
-                acessos.
+                . A estação mantém o horário normal através dos restantes acessos.
               </p>
             ))}
-            <a
-              className="source-link"
-              href={station.hours.source}
-              target="_blank"
-              rel="noreferrer"
-            >
+            <a className="source-link" href={station.hours.source} target="_blank" rel="noreferrer">
               Fonte oficial · verificado em {station.hours.verifiedAt}
             </a>
           </section>
@@ -331,11 +301,7 @@ export function StationDrawer({
             </div>
             {station.lat !== undefined && station.lon !== undefined ? (
               <>
-                <Suspense
-                  fallback={
-                    <div className="map-placeholder">A carregar o mapa…</div>
-                  }
-                >
+                <Suspense fallback={<div className="map-placeholder">A carregar o mapa…</div>}>
                   <LocationMap
                     lat={station.lat}
                     lon={station.lon}
@@ -368,13 +334,7 @@ export function StationDrawer({
             <section>
               <h3>Mais informação</h3>
               {station.urls.map((url, i) => (
-                <a
-                  key={url}
-                  className="official-link"
-                  href={url}
-                  target="_blank"
-                  rel="noreferrer"
-                >
+                <a key={url} className="official-link" href={url} target="_blank" rel="noreferrer">
                   Página oficial da estação
                   {station.urls.length > 1 ? ` · ${i + 1}` : ""} ↗
                 </a>
@@ -382,8 +342,8 @@ export function StationDrawer({
             </section>
           )}
           <p className="view-note">
-            As posições dos comboios são estimadas; as previsões e mensagens de
-            circulação são fornecidas pelo Metro de Lisboa.
+            As posições dos comboios são estimadas; as previsões e mensagens de circulação são
+            fornecidas pelo Metro de Lisboa.
           </p>
         </div>
       ) : (

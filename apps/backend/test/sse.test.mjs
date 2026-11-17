@@ -1,9 +1,9 @@
-import { test } from 'node:test';
-import assert from 'node:assert/strict';
-import { EventEmitter } from 'node:events';
-import { SnapshotStream } from '../dist/sse.js';
-import { toSnapshot } from '@metro/shared-utils';
-import { FakeRedis, logger, nextTurn } from './helpers.mjs';
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
+import { SnapshotStream } from "../dist/sse.js";
+import { toSnapshot } from "@metro/shared-utils";
+import { FakeRedis, logger, nextTurn } from "./helpers.mjs";
 
 class Client extends EventEmitter {
   destroyed = false;
@@ -11,31 +11,37 @@ class Client extends EventEmitter {
   writableLength = 0;
   frames = [];
   acceptsWrites = true;
-  write(frame) { this.frames.push(frame); return this.acceptsWrites; }
-  destroy() { this.destroyed = true; this.emit('close'); }
+  write(frame) {
+    this.frames.push(frame);
+    return this.acceptsWrites;
+  }
+  destroy() {
+    this.destroyed = true;
+    this.emit("close");
+  }
 }
-test('stream ignores invalid payloads and bounds slow-client buffering', async () => {
+void test("stream ignores invalid payloads and bounds slow-client buffering", async () => {
   const redis = new FakeRedis();
-  const stream = new SnapshotStream(redis, 'events', logger);
+  const stream = new SnapshotStream(redis, "events", logger);
   await nextTurn();
   const slow = new Client();
   const healthy = new Client();
   stream.add(slow, null);
   stream.add(healthy, null);
-  await redis.publish('events', '{}');
+  await redis.publish("events", "{}");
   assert.equal(healthy.frames.length, 1);
   slow.acceptsWrites = false;
-  await redis.publish('events', JSON.stringify(toSnapshot([])));
-  assert.equal(slow.destroyed, false, 'one bounded snapshot is allowed to drain');
+  await redis.publish("events", JSON.stringify(toSnapshot([])));
+  assert.equal(slow.destroyed, false, "one bounded snapshot is allowed to drain");
   assert.equal(healthy.frames.length, 2);
-  await redis.publish('events', JSON.stringify(toSnapshot([])));
-  assert.equal(slow.destroyed, true, 'a second frame while blocked disconnects the slow reader');
+  await redis.publish("events", JSON.stringify(toSnapshot([])));
+  assert.equal(slow.destroyed, true, "a second frame while blocked disconnects the slow reader");
   const draining = new Client();
   draining.acceptsWrites = false;
   stream.add(draining, null);
-  draining.emit('drain');
+  draining.emit("drain");
   draining.acceptsWrites = true;
-  await redis.publish('events', JSON.stringify(toSnapshot([])));
+  await redis.publish("events", JSON.stringify(toSnapshot([])));
   assert.equal(draining.destroyed, false);
   await stream.close();
   assert.equal(healthy.destroyed, true);

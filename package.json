@@ -2,11 +2,6 @@
   "name": "metro-live",
   "version": "1.0.5",
   "private": true,
-  "packageManager": "pnpm@8.15.5",
-  "engines": {
-    "node": ">=26.13.1 <27",
-    "pnpm": ">=8.15.5"
-  },
   "scripts": {
     "dev": "turbo run dev --parallel",
     "dev:front": "turbo run dev --filter=@metro/frontend",
@@ -17,7 +12,7 @@
     "lint": "pnpm typecheck",
     "typecheck": "pnpm build",
     "test": "pnpm build && pnpm --filter @metro/backend test && pnpm test:presentation && node --test tools/test/*.test.mjs",
-    "test:presentation": "pnpm --filter @metro/backend exec tsx --test ../frontend/test/*.test.mjs",
+    "test:presentation": "pnpm --filter @metro/backend exec node --import vite-plus/register --test ../frontend/test/*.test.mjs",
     "test:integration": "node tools/test-compose.mjs",
     "record:metro": "pnpm build:back && pnpm --filter @metro/backend exec cross-env NODE_EXTRA_CA_CERTS=../../infra/certs/metro-ca-bundle.pem node ../../tools/record-metro.mjs",
     "replay:metro": "node tools/replay-metro.mjs",
@@ -28,12 +23,41 @@
     "purge:nm": "pnpm dlx rimraf --glob \"**/node_modules\" node_modules",
     "purge:cache": "pnpm dlx rimraf --glob \"**/.turbo\" \"**/.vite\" \"**/.cache\" \"**/tsconfig.tsbuildinfo\"",
     "purge:dist": "pnpm dlx rimraf --glob \"**/dist\" dist",
-    "purge:types": "pnpm dlx rimraf --glob \"**/tsconfig.tsbuildinfo\" \"**/*.tsbuildinfo\""
+    "purge:types": "pnpm dlx rimraf --glob \"**/tsconfig.tsbuildinfo\" \"**/*.tsbuildinfo\"",
+    "test:ci-policy": "node --test tools/ci-policy.test.mjs",
+    "hooks:install": "node tools/install-hooks.mjs",
+    "prepare": "node --input-type=module -e \"import { existsSync } from 'node:fs'; if (existsSync('tools/install-hooks.mjs')) await import('./tools/install-hooks.mjs');\"",
+    "precommit": "node tools/git-hooks.mjs commit",
+    "check": "node tools/git-hooks.mjs check",
+    "format": "node tools/git-hooks.mjs format",
+    "prepush": "npm run check",
+    "check:code": "vp check",
+    "format:check": "vp fmt --check"
   },
   "devDependencies": {
     "autoprefixer": "^10.4.21",
+    "pnpm": "9.15.9",
     "postcss": "^8.5.6",
     "tailwindcss": "^4.1.13",
-    "turbo": "^2.0.6"
+    "turbo": "^2.0.6",
+    "vite-plus": "catalog:"
+  },
+  "engines": {
+    "node": ">=26.13.1 <27",
+    "pnpm": ">=8.15.5"
+  },
+  "packageManager": "pnpm@9.15.9",
+  "pnpm": {
+    "overrides": {
+      "vite@*": "npm:@voidzero-dev/vite-plus-core@1.6.0"
+    },
+    "peerDependencyRules": {
+      "allowAny": [
+        "vite"
+      ],
+      "allowedVersions": {
+        "vite": "*"
+      }
+    }
   }
 }

@@ -3,11 +3,7 @@ import { BrowserRouter, Route, Routes, useLocation } from "react-router-dom";
 import { Snapshot } from "@metro/shared-types";
 import { API_BASE } from "./api";
 import { adaptiveView, saved, useSnapshotStore } from "./state";
-import {
-  ingestSnapshot,
-  startMotionEngine,
-  synchronizeClock,
-} from "./motion-engine";
+import { ingestSnapshot, startMotionEngine, synchronizeClock } from "./motion-engine";
 import { Shell } from "./Shell";
 import { Home } from "./views/Home";
 import { LineView } from "./views/LineView";
@@ -25,11 +21,9 @@ function Connection() {
     const reduced = matchMedia("(prefers-reduced-motion: reduce)");
     const layout = matchMedia("(min-width: 1200px) and (pointer: fine)");
     const systemTheme = matchMedia("(prefers-color-scheme: dark)");
-    const changeReduced = () =>
-      useSnapshotStore.setState({ reducedMotion: reduced.matches });
+    const changeReduced = () => useSnapshotStore.setState({ reducedMotion: reduced.matches });
     const changeLayout = () => {
-      if (!saved("metro-view"))
-        useSnapshotStore.setState({ view: adaptiveView() });
+      if (!saved("metro-view")) useSnapshotStore.setState({ view: adaptiveView() });
     };
     const changeTheme = () => {
       if (!saved("metro-theme"))

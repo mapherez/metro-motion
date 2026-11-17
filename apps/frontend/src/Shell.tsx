@@ -17,10 +17,7 @@ export function Shell() {
     reducedMotion,
   } = useSnapshotStore();
   const freshest = snapshot
-    ? Math.max(
-        0,
-        ...Object.values(snapshot.lines).map((l) => l.dataObservedAt ?? 0),
-      )
+    ? Math.max(0, ...Object.values(snapshot.lines).map((l) => l.dataObservedAt ?? 0))
     : 0;
   const stale = !freshest || now - freshest >= 30;
   const closed = snapshot?.serviceOpen === false;
@@ -61,9 +58,7 @@ export function Shell() {
           <button
             className="icon-button"
             onClick={toggleTheme}
-            aria-label={
-              theme === "dark" ? "Ativar tema claro" : "Ativar tema escuro"
-            }
+            aria-label={theme === "dark" ? "Ativar tema claro" : "Ativar tema escuro"}
             title={theme === "dark" ? "Tema claro" : "Tema escuro"}
           >
             {theme === "dark" ? "☀" : "☾"}
@@ -75,9 +70,7 @@ export function Shell() {
           <NavLink
             key={line}
             to={`/line/${line}`}
-            className={({ isActive }) =>
-              `line-link ${isActive ? "active" : ""}`
-            }
+            className={({ isActive }) => `line-link ${isActive ? "active" : ""}`}
             style={{ "--line-color": LINE_COLOR[line] } as React.CSSProperties}
           >
             <span className="line-dot" aria-hidden="true" />
@@ -104,11 +97,7 @@ export function Shell() {
           aria-pressed={paused}
           disabled={reducedMotion}
         >
-          {reducedMotion
-            ? "Movimento reduzido"
-            : paused
-              ? "Retomar animação"
-              : "Pausar animação"}
+          {reducedMotion ? "Movimento reduzido" : paused ? "Retomar animação" : "Pausar animação"}
         </button>
       </footer>
     </div>

@@ -12,13 +12,10 @@ export const LINE_COLOR: Record<LineName, string> = {
   vermelha: "#E7343F",
 };
 export function etaText(arrival: StationArrival, now: number) {
-  if (arrival.observedAt === undefined || now - arrival.observedAt >= 30)
-    return "—";
+  if (arrival.observedAt === undefined || now - arrival.observedAt >= 30) return "—";
   const seconds = Math.max(
     0,
-    Math.ceil(
-      (arrival.arrivalAt ?? arrival.observedAt + arrival.etaSeconds) - now,
-    ),
+    Math.ceil((arrival.arrivalAt ?? arrival.observedAt + arrival.etaSeconds) - now),
   );
   return seconds === 0
     ? "A chegar"

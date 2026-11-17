@@ -11,19 +11,13 @@ type Props = {
 const escapeHtml = (s: string) =>
   s.replace(
     /[&<>"']/g,
-    (c) =>
-      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
-        c
-      ]!,
+    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!,
   );
 export default function LocationMap({ lat, lon, name, tiles }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!ref.current) return;
-    const instance = map(ref.current, { scrollWheelZoom: false }).setView(
-      [lat, lon],
-      16,
-    );
+    const instance = map(ref.current, { scrollWheelZoom: false }).setView([lat, lon], 16);
     instance.zoomControl.setPosition("topright");
     const zoomIn = ref.current.querySelector(".leaflet-control-zoom-in");
     const zoomOut = ref.current.querySelector(".leaflet-control-zoom-out");

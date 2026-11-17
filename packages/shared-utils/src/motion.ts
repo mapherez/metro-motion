@@ -4,8 +4,7 @@ export const STALE_SECONDS = 30;
 // Units are station intervals, not metres: this is schematic estimated motion.
 export const MAX_SPEED = 0.06;
 export const MAX_ACCELERATION = 0.006;
-const clamp = (n: number, min: number, max: number) =>
-  Math.max(min, Math.min(max, n));
+const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
 
 export type MotionSample = {
   position: number;
@@ -24,16 +23,11 @@ export function sampleSegment(
   const a = s.v0 * duration;
   const b = s.v1 * duration;
   const position =
-    s.from +
-    (-2 * u ** 3 + 3 * u ** 2) * d +
-    (u ** 3 - 2 * u ** 2 + u) * a +
-    (u ** 3 - u ** 2) * b;
+    s.from + (-2 * u ** 3 + 3 * u ** 2) * d + (u ** 3 - 2 * u ** 2 + u) * a + (u ** 3 - u ** 2) * b;
   const velocity =
     at > s.endAt
       ? s.v1
-      : ((-6 * u * u + 6 * u) * d +
-          (3 * u * u - 4 * u + 1) * a +
-          (3 * u * u - 2 * u) * b) /
+      : ((-6 * u * u + 6 * u) * d + (3 * u * u - 4 * u + 1) * a + (3 * u * u - 2 * u) * b) /
         duration;
   return { position, velocity };
 }
@@ -57,9 +51,7 @@ export function sampleMotion(train: Train, at: number): MotionSample {
           : "running";
   const fadeIn = clamp((at - train.appearedAt) / 0.8, 0, 1);
   const fadeOut =
-    train.retiringAt === undefined
-      ? 1
-      : 1 - clamp((at - train.retiringAt) / 0.8, 0, 1);
+    train.retiringAt === undefined ? 1 : 1 - clamp((at - train.retiringAt) / 0.8, 0, 1);
   return {
     ...sample,
     velocity: stale ? 0 : sample.velocity,
@@ -83,8 +75,7 @@ function segment(
     to,
     v0,
     v1,
-    phase:
-      from === to ? "dwelling" : Math.abs(v0) < 0.001 ? "departing" : "running",
+    phase: from === to ? "dwelling" : Math.abs(v0) < 0.001 ? "departing" : "running",
   };
 }
 
@@ -116,10 +107,8 @@ export function planMotion(
   // zero-velocity minimum duration on every poll would progressively delay it.
   for (let attempt = 0; attempt < 80; attempt++) {
     const direct = segment(now, duration, position, target, velocity);
-    const startAcceleration =
-      (6 * distance) / duration ** 2 - (4 * speed) / duration;
-    const endAcceleration =
-      (-6 * distance) / duration ** 2 + (2 * speed) / duration;
+    const startAcceleration = (6 * distance) / duration ** 2 - (4 * speed) / duration;
+    const endAcceleration = (-6 * distance) / duration ** 2 + (2 * speed) / duration;
     if (speed * duration > 3 * distance + 1e-10) break;
     // Velocity is quadratic in normalized time. Check its actual extremum,
     // not a grid that can miss a peak between samples.
@@ -132,8 +121,7 @@ export function planMotion(
         : speed;
     const safe =
       Math.max(Math.abs(startAcceleration), Math.abs(endAcceleration)) <=
-        MAX_ACCELERATION + 1e-10 &&
-      Math.max(speed, peakSpeed) <= MAX_SPEED + 1e-8;
+        MAX_ACCELERATION + 1e-10 && Math.max(speed, peakSpeed) <= MAX_SPEED + 1e-8;
     if (safe) return [direct];
     duration = duration * 1.06 + 0.01;
   }

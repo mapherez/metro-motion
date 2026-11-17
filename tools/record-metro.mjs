@@ -6,9 +6,7 @@ import { observations } from "../packages/shared-utils/dist/index.js";
 import { MetroResponse } from "../apps/backend/dist/metro-api.js";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
-const require = createRequire(
-  new URL("../apps/backend/package.json", import.meta.url),
-);
+const require = createRequire(new URL("../apps/backend/package.json", import.meta.url));
 export function argumentsFor(args) {
   const options = {
     sessions: 2,
@@ -24,25 +22,18 @@ export function argumentsFor(args) {
     else if (["--sessions", "--minutes", "--interval"].includes(arg)) {
       const key = arg.slice(2),
         value = Number(args[++i]);
-      if (
-        !Number.isFinite(value) ||
-        value <= 0 ||
-        (key !== "minutes" && !Number.isInteger(value))
-      )
+      if (!Number.isFinite(value) || value <= 0 || (key !== "minutes" && !Number.isInteger(value)))
         throw new Error(`Invalid ${arg}`);
       options[key] = value;
     } else throw new Error(`Unknown option: ${arg}`);
   }
-  if (options.interval < 1000)
-    throw new Error("Recording interval must be at least 1000ms");
+  if (options.interval < 1000) throw new Error("Recording interval must be at least 1000ms");
   return options;
 }
 export async function record(options) {
   let env = {};
   try {
-    env = require("dotenv").parse(
-      await readFile(path.join(root, ".env"), "utf8"),
-    );
+    env = require("dotenv").parse(await readFile(path.join(root, ".env"), "utf8"));
   } catch {}
   const token = process.env.METRO_API_KEY || env.METRO_API_KEY;
   if (!token) throw new Error("METRO_API_KEY is required");
@@ -51,8 +42,7 @@ export async function record(options) {
     env.METRO_API_BASE ||
     "https://api.metrolisboa.pt:8243/estadoServicoML/1.0.1/";
   const parsedBase = new URL(base);
-  if (parsedBase.protocol !== "https:")
-    throw new Error("METRO_API_BASE must use HTTPS");
+  if (parsedBase.protocol !== "https:") throw new Error("METRO_API_BASE must use HTTPS");
   let stopping = false;
   const stop = () => {
     stopping = true;
@@ -90,9 +80,7 @@ export async function record(options) {
     ];
     return {
       resposta: raw.resposta.map((row) =>
-        Object.fromEntries(
-          fields.filter((f) => row[f] !== undefined).map((f) => [f, row[f]]),
-        ),
+        Object.fromEntries(fields.filter((f) => row[f] !== undefined).map((f) => [f, row[f]])),
       ),
     };
   };
@@ -101,14 +89,10 @@ export async function record(options) {
     let source = "global";
     if (!data.resposta.length) {
       const lines = await Promise.allSettled(
-        ["Verde", "Azul", "Amarela", "Vermelha"].map((l) =>
-          fetchData(`tempoEspera/Linha/${l}`),
-        ),
+        ["Verde", "Azul", "Amarela", "Vermelha"].map((l) => fetchData(`tempoEspera/Linha/${l}`)),
       );
       data = {
-        resposta: lines.flatMap((r) =>
-          r.status === "fulfilled" ? r.value.resposta : [],
-        ),
+        resposta: lines.flatMap((r) => (r.status === "fulfilled" ? r.value.resposta : [])),
       };
       source = "lines";
     }
@@ -117,8 +101,7 @@ export async function record(options) {
       receivedAt,
       source,
       data,
-      freshObservations: observations(MetroResponse.parse(data), receivedAt)
-        .length,
+      freshObservations: observations(MetroResponse.parse(data), receivedAt).length,
     };
   };
   try {
@@ -128,9 +111,7 @@ export async function record(options) {
     );
     if (options.probe) return { freshObservations: first.freshObservations };
     if (!first.freshObservations)
-      throw new Error(
-        "No fresh numeric observations; normal-service recordings cannot start",
-      );
+      throw new Error("No fresh numeric observations; normal-service recordings cannot start");
     await mkdir(options.output, { recursive: true });
     for (let session = 1; session <= options.sessions && !stopping; session++) {
       const startedAt = first?.receivedAt ?? Date.now() / 1000;
@@ -140,10 +121,7 @@ export async function record(options) {
         usable = 0,
         errors = 0;
       console.log(`Recording session ${session}/${options.sessions}: ${file}`);
-      while (
-        !stopping &&
-        Date.now() / 1000 - startedAt < options.minutes * 60
-      ) {
+      while (!stopping && Date.now() / 1000 - startedAt < options.minutes * 60) {
         const cycleStart = Date.now();
         try {
           const frame = first ?? (await sample());
@@ -168,14 +146,10 @@ export async function record(options) {
           );
         }
         await new Promise((r) =>
-          setTimeout(
-            r,
-            Math.max(0, options.interval - (Date.now() - cycleStart)),
-          ),
+          setTimeout(r, Math.max(0, options.interval - (Date.now() - cycleStart))),
         );
       }
-      const complete =
-        !stopping && Date.now() / 1000 - startedAt >= options.minutes * 60;
+      const complete = !stopping && Date.now() / 1000 - startedAt >= options.minutes * 60;
       await writeFile(
         path.join(options.output, `${name}.manifest.json`),
         JSON.stringify(
@@ -194,25 +168,19 @@ export async function record(options) {
           2,
         ) + "\n",
       );
-      console.log(
-        `Session ${session}: ${frames} frames, ${usable} usable, complete=${complete}.`,
-      );
+      console.log(`Session ${session}: ${frames} frames, ${usable} usable, complete=${complete}.`);
     }
   } finally {
     process.removeListener("SIGINT", stop);
     process.removeListener("SIGTERM", stop);
   }
 }
-if (
-  process.argv[1] &&
-  import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href
-) {
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   record(argumentsFor(process.argv.slice(2))).catch((error) => {
     console.error(
       error.status
         ? `Metro request failed (HTTP ${error.status})`
-        : error.message ===
-            "No fresh numeric observations; normal-service recordings cannot start"
+        : error.message === "No fresh numeric observations; normal-service recordings cannot start"
           ? error.message
           : "Recorder failed; check configuration, TLS and API availability",
     );

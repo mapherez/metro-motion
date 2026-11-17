@@ -35,3 +35,9 @@ output/playwright/
 # Frameworks (possible future frontend)
 .next/
 out/
+
+# Shared Vite+ editor configuration.
+!.vscode/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json

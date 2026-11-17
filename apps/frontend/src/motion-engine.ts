@@ -1,9 +1,5 @@
 import type { Snapshot, Train } from "@metro/shared-types";
-import {
-  planMotion,
-  sampleMotion,
-  type MotionSample,
-} from "@metro/shared-utils";
+import { planMotion, sampleMotion, type MotionSample } from "@metro/shared-utils";
 import { useSnapshotStore } from "./state";
 
 const tracks = new Map<string, Train>();
@@ -30,9 +26,7 @@ export function renderedMotion(train: Train, at = motionNow()): MotionSample {
   const { paused, reducedMotion } = useSnapshotStore.getState();
   if ((paused || reducedMotion) && frozen.has(key)) {
     const sample = frozen.get(key)!;
-    return at >= train.validUntil
-      ? { ...sample, velocity: 0, phase: "stale" }
-      : sample;
+    return at >= train.validUntil ? { ...sample, velocity: 0, phase: "stale" } : sample;
   }
   const sample = sampleMotion(tracks.get(key) ?? train, at);
   if (paused || reducedMotion) frozen.set(key, sample);
@@ -109,10 +103,7 @@ export function ingestSnapshot(snapshot: Snapshot) {
       }
       tracks.set(key, next);
       signatures.set(key, signature);
-      if (
-        useSnapshotStore.getState().reducedMotion &&
-        !useSnapshotStore.getState().paused
-      )
+      if (useSnapshotStore.getState().reducedMotion && !useSnapshotStore.getState().paused)
         frozen.delete(key);
     }
   for (const key of tracks.keys())
@@ -143,8 +134,7 @@ function draw() {
 function tick() {
   if (!running) return;
   const { paused, reducedMotion } = useSnapshotStore.getState();
-  if ((!paused && !reducedMotion) || Math.floor(motionNow()) !== lastSecond)
-    draw();
+  if ((!paused && !reducedMotion) || Math.floor(motionNow()) !== lastSecond) draw();
   frame = requestAnimationFrame(tick);
 }
 function start() {
@@ -172,10 +162,7 @@ export function startMotionEngine() {
     }
   };
   const unsubscribe = useSnapshotStore.subscribe((state, previous) => {
-    if (
-      state.paused !== previous.paused ||
-      state.reducedMotion !== previous.reducedMotion
-    ) {
+    if (state.paused !== previous.paused || state.reducedMotion !== previous.reducedMotion) {
       if (!state.paused && !state.reducedMotion) {
         const now = motionNow();
         for (const [key, sample] of frozen) {

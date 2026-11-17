@@ -2,7 +2,7 @@ FROM node:26-bookworm-slim AS build
 WORKDIR /app
 ENV TURBO_TELEMETRY_DISABLED=1
 # Pin pnpm without relying on Corepack downloads/signature changes at runtime.
-RUN npm install --global pnpm@8.15.5
+RUN npm install --global pnpm@9.15.9
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
 COPY apps/backend/package.json ./apps/backend/
 COPY apps/frontend/package.json ./apps/frontend/
@@ -11,7 +11,7 @@ COPY packages/shared-utils/package.json ./packages/shared-utils/
 COPY packages/station-data/package.json ./packages/station-data/
 RUN pnpm install --frozen-lockfile
 COPY . .
-RUN pnpm build && pnpm --filter @metro/backend test
+RUN pnpm build
 RUN pnpm --filter @metro/backend deploy --prod /app/deploy
 
 FROM node:26-bookworm-slim AS runner

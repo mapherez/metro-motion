@@ -18,17 +18,12 @@ export class SnapshotStream {
     private log: FastifyBaseLogger,
   ) {
     this.subscriber = redis.duplicate();
-    this.subscriber.on("error", () =>
-      this.log.warn("Redis subscriber unavailable"),
-    );
+    this.subscriber.on("error", () => this.log.warn("Redis subscriber unavailable"));
     this.subscriber.on("ready", this.subscribe);
     this.subscriber.on("close", this.unavailable);
     this.subscriber.on("message", this.onMessage);
     if (this.subscriber.status === "ready") void this.subscribe();
-    this.heartbeat = setInterval(
-      () => this.broadcast(`: ping ${Date.now()}\n\n`),
-      20000,
-    );
+    this.heartbeat = setInterval(() => this.broadcast(`: ping ${Date.now()}\n\n`), 20000);
     this.heartbeat.unref();
   }
 
@@ -49,9 +44,7 @@ export class SnapshotStream {
   };
 
   get ready() {
-    return (
-      !this.closed && this.subscribed && this.subscriber.status === "ready"
-    );
+    return !this.closed && this.subscribed && this.subscriber.status === "ready";
   }
 
   private write(client: ServerResponse, frame: string) {
@@ -103,10 +96,7 @@ export class SnapshotStream {
     };
     client.once("close", remove);
     client.once("error", remove);
-    this.write(
-      client,
-      snapshot ? `data: ${JSON.stringify(snapshot)}\n\n` : ": connected\n\n",
-    );
+    this.write(client, snapshot ? `data: ${JSON.stringify(snapshot)}\n\n` : ": connected\n\n");
   }
 
   async close() {

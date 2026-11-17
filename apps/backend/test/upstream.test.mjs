@@ -15,7 +15,7 @@ const row = (clock) => ({
   sairServico: 0,
   UT: 2,
 });
-test("empty global responses switch to four line endpoints and recheck global after 60 seconds", async () => {
+void test("empty global responses switch to four line endpoints and recheck global after 60 seconds", async () => {
   const redis = new FakeRedis(),
     config = settings({ mock: false });
   let clock = start,
@@ -27,8 +27,7 @@ test("empty global responses switch to four line endpoints and recheck global af
       requests.push(endpoint);
       if (endpoint === "tempoEspera/Estacao/todos")
         return { resposta: globalRecovered ? [row(clock)] : [] };
-      if (endpoint === "tempoEspera/Linha/Verde")
-        return { resposta: [row(clock)] };
+      if (endpoint === "tempoEspera/Linha/Verde") return { resposta: [row(clock)] };
       if (endpoint.startsWith("tempoEspera/Linha/")) return { resposta: [] };
       if (endpoint === "estadoLinha/todos")
         return {
@@ -38,36 +37,24 @@ test("empty global responses switch to four line endpoints and recheck global af
     },
   });
   await ingestor.pollOnce();
-  assert.equal(
-    requests.filter((p) => p.startsWith("tempoEspera/Linha")).length,
-    0,
-  );
+  assert.equal(requests.filter((p) => p.startsWith("tempoEspera/Linha")).length, 0);
   clock += 2000;
   await ingestor.pollOnce();
-  assert.equal(
-    requests.filter((p) => p.startsWith("tempoEspera/Linha")).length,
-    4,
-  );
+  assert.equal(requests.filter((p) => p.startsWith("tempoEspera/Linha")).length, 4);
   const fallback = JSON.parse(await redis.get(config.redis.snapshotKey));
   assert.equal(fallback.source, "lines");
   assert.equal(fallback.lines.verde.trains.length, 1);
   assert.equal(fallback.lines.verde.status.message, "Circulação normal");
   clock += 2000;
   await ingestor.pollOnce();
-  assert.equal(
-    requests.filter((p) => p === "tempoEspera/Estacao/todos").length,
-    2,
-  );
+  assert.equal(requests.filter((p) => p === "tempoEspera/Estacao/todos").length, 2);
   clock += 60000;
   globalRecovered = true;
   await ingestor.pollOnce();
-  assert.equal(
-    JSON.parse(await redis.get(config.redis.snapshotKey)).source,
-    "global",
-  );
+  assert.equal(JSON.parse(await redis.get(config.redis.snapshotKey)).source, "global");
   assert.equal(requests.filter((p) => p === "infoEstacao/todos").length, 1);
 });
-test("strike-like empty and non-numeric data cannot claim fresh train observations", async () => {
+void test("strike-like empty and non-numeric data cannot claim fresh train observations", async () => {
   const redis = new FakeRedis(),
     config = settings({ mock: false });
   let clock = start;
@@ -84,9 +71,7 @@ test("strike-like empty and non-numeric data cannot claim fresh train observatio
         };
       if (endpoint.startsWith("tempoEspera/Linha/"))
         return {
-          resposta: [
-            { ...row(clock), tempoChegada1: "--", hora: "20250912181134" },
-          ],
+          resposta: [{ ...row(clock), tempoChegada1: "--", hora: "20250912181134" }],
         };
       return { resposta: [] };
     },
@@ -104,18 +89,12 @@ test("strike-like empty and non-numeric data cannot claim fresh train observatio
   assert.equal(data.lines.verde.dataObservedAt, null);
   assert.equal(data.lines.verde.trains.length, 0);
 });
-test("upstream application error codes are failures even with an HTTP 200 envelope", () => {
-  assert.equal(
-    MetroResponse.safeParse({ resposta: [], codigo: "500" }).success,
-    false,
-  );
-  assert.equal(
-    MetroResponse.safeParse({ resposta: [row(start)], codigo: 200 }).success,
-    true,
-  );
+void test("upstream application error codes are failures even with an HTTP 200 envelope", () => {
+  assert.equal(MetroResponse.safeParse({ resposta: [], codigo: "500" }).success, false);
+  assert.equal(MetroResponse.safeParse({ resposta: [row(start)], codigo: 200 }).success, true);
 });
 
-test("live numeric ETAs coexist with string and unavailable predictions without rejecting the response", () => {
+void test("live numeric ETAs coexist with string and unavailable predictions without rejecting the response", () => {
   const data = MetroResponse.parse({
     codigo: "200",
     resposta: [
@@ -159,7 +138,7 @@ test("live numeric ETAs coexist with string and unavailable predictions without 
   );
 });
 
-test("opening recovers from the last closed snapshot when the API returns numeric ETAs", async () => {
+void test("opening recovers from the last closed snapshot when the API returns numeric ETAs", async () => {
   const redis = new FakeRedis(),
     config = settings({ mock: false });
   let clock = Date.parse("2026-01-15T06:29:56Z");

@@ -1,9 +1,5 @@
 import { lineNames, lineOrder, destinos } from "@metro/station-data";
-import {
-  formatMetroTime,
-  parseMetroTime,
-  type MetroData,
-} from "@metro/shared-utils";
+import { formatMetroTime, parseMetroTime, type MetroData } from "@metro/shared-utils";
 import { MetroResponse } from "./metro-api.js";
 
 type Frame = { offsetSeconds: number; receivedAt?: number; data: MetroData };
@@ -45,9 +41,7 @@ export function validateReplay(value: unknown): Replay {
       throw new Error("Replay offsets must increase");
     frames.push({
       offsetSeconds: frame.offsetSeconds,
-      ...(frame.receivedAt === undefined
-        ? {}
-        : { receivedAt: frame.receivedAt }),
+      ...(frame.receivedAt === undefined ? {} : { receivedAt: frame.receivedAt }),
       data: MetroResponse.parse(frame.data),
     });
     previous = frame.offsetSeconds;
@@ -55,11 +49,7 @@ export function validateReplay(value: unknown): Replay {
   return { ...replay, frames };
 }
 
-export function replayAt(
-  replay: Replay,
-  startedAt: number,
-  now: number,
-): MetroData {
+export function replayAt(replay: Replay, startedAt: number, now: number): MetroData {
   if (replay.kind === "synthetic-network") {
     const travel = replay.travelSeconds!,
       dwell = replay.dwellSeconds!,
@@ -69,15 +59,12 @@ export function replayAt(
       const order = lineOrder[line];
       for (let n = 0; n < 2; n++) {
         const half = (order.length - 1) * step;
-        const elapsed =
-          (((now - startedAt + n * half + 35) % (2 * half)) + 2 * half) %
-          (2 * half);
+        const elapsed = (((now - startedAt + n * half + 35) % (2 * half)) + 2 * half) % (2 * half);
         const direction = elapsed < half ? 1 : -1;
         const legTime = elapsed % half;
         const legIndex = Math.floor(legTime / step);
         const phaseTime = legTime % step;
-        const stationIndex =
-          direction === 1 ? legIndex : order.length - 1 - legIndex;
+        const stationIndex = direction === 1 ? legIndex : order.length - 1 - legIndex;
         const terminal = direction === 1 ? order[order.length - 1] : order[0];
         const destinationId = Object.entries(destinos).find(
           ([, d]) => d?.terminal === terminal && d?.line === line,
@@ -102,8 +89,7 @@ export function replayAt(
   }
   const frames = replay.frames!;
   const elapsed = now - startedAt;
-  const frame =
-    [...frames].reverse().find((f) => f.offsetSeconds <= elapsed) ?? frames[0];
+  const frame = [...frames].reverse().find((f) => f.offsetSeconds <= elapsed) ?? frames[0];
   const firstValidFrame = frames.find((f) =>
     f.data.resposta.some((r) => parseMetroTime(r.hora) !== null),
   );
@@ -114,11 +100,8 @@ export function replayAt(
   const firstTime = receivedFrame
     ? receivedFrame.receivedAt! - receivedFrame.offsetSeconds
     : firstValidFrame
-      ? Math.max(
-          ...firstValidFrame.data.resposta.map(
-            (r) => parseMetroTime(r.hora) ?? -Infinity,
-          ),
-        ) - firstValidFrame.offsetSeconds
+      ? Math.max(...firstValidFrame.data.resposta.map((r) => parseMetroTime(r.hora) ?? -Infinity)) -
+        firstValidFrame.offsetSeconds
       : startedAt;
   return {
     ...frame.data,
@@ -126,10 +109,7 @@ export function replayAt(
       const sourceTime = parseMetroTime(r.hora, frame.receivedAt);
       return {
         ...r,
-        hora:
-          sourceTime === null
-            ? r.hora
-            : formatMetroTime(startedAt + sourceTime - firstTime),
+        hora: sourceTime === null ? r.hora : formatMetroTime(startedAt + sourceTime - firstTime),
       };
     }),
   };

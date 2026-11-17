@@ -15,17 +15,11 @@ export function normalizeTempoEspera(
   _stationStates: Map<string, unknown>,
   dwellSeconds: number,
 ): Train[] {
-  const now = Math.max(
-    0,
-    ...data.resposta.map((r) => parseMetroTime(r.hora) ?? 0),
-  );
+  const now = Math.max(0, ...data.resposta.map((r) => parseMetroTime(r.hora) ?? 0));
   const snapshot = new TrainTracker(dwellSeconds).update(data, now);
   return lineNames.flatMap((line) => snapshot.lines[line].trains);
 }
-export function toSnapshot(
-  trains: Train[],
-  overrides: Partial<Snapshot> = {},
-): Snapshot {
+export function toSnapshot(trains: Train[], overrides: Partial<Snapshot> = {}): Snapshot {
   const snapshot = emptySnapshot(Date.now() / 1000);
   for (const train of trains) snapshot.lines[train.line].trains.push(train);
   return { ...snapshot, ...overrides };

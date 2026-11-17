@@ -17,9 +17,7 @@ function persist(key: string, value: string) {
   }
 }
 export const adaptiveView = (): ViewMode =>
-  matchMedia("(min-width: 1200px) and (pointer: fine)").matches
-    ? "map"
-    : "lines";
+  matchMedia("(min-width: 1200px) and (pointer: fine)").matches ? "map" : "lines";
 type Store = {
   snapshot: Snapshot | null;
   setSnapshot: (snapshot: Snapshot | null) => void;
