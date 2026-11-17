@@ -17,9 +17,9 @@ RUN pnpm --filter @metro/backend deploy --prod /app/deploy
 FROM node:26-bookworm-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production \
-    NODE_EXTRA_CA_CERTS=/app/certs/metro-ca-bundle.pem \
-    FRONTEND_DIST_DIR=/app/frontend \
-    METRO_MOCK_FILE=/app/fixtures/metro.json
+  NODE_EXTRA_CA_CERTS=/app/certs/metro-ca-bundle.pem \
+  FRONTEND_DIST_DIR=/app/frontend \
+  METRO_MOCK_FILE=/app/fixtures/metro.json
 COPY --from=build --chown=node:node /app/deploy ./
 COPY --from=build --chown=node:node /app/apps/frontend/dist ./frontend
 COPY --chown=node:node infra/certs/metro-ca-bundle.pem ./certs/metro-ca-bundle.pem
